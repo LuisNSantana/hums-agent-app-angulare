@@ -313,7 +313,7 @@ export class SupabaseService {
 
   private mapAIModelFromDb(row: AIModelRow): AIModel {
     return {
-      id: row.id,
+      id: row.model_id, // Use Ollama model_id as the identifier
       name: row.name,
       provider: row.provider as AIModel['provider'],
       description: row.description || '',

@@ -359,14 +359,25 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         if (window.innerWidth < 768) {
           this.sidebarOpen.set(false);
         }
-      }      if (conversationId) {
+      }
+      if (conversationId) {
+        // Find the selected model object to get its model_id string (should be the 'id' for Ollama, but if the model is selected by UUID, map to the correct id)
+        const selectedModelId = this.selectedModel();
+        // Try to find by id (Ollama id) or by a custom UUID mapping if available in your model list
+        let model_id = selectedModelId;
+        // If your AIModel type only has 'id', ensure the model selector always uses the Ollama id (e.g., 'deepseek-r1:7b')
+        // If you have a separate UUID mapping, you need to maintain a map from UUID to model_id
+        // For now, only use the id property, which should be the Ollama model name
+        const selectedModelObj = this.availableModels().find(m => m.id === selectedModelId);
+        if (selectedModelObj) {
+          model_id = selectedModelObj.id;
+        }
         console.log('[ChatInterface] Enviando mensaje a conversación:', conversationId);
-        console.log('[ChatInterface] Modelo seleccionado:', this.selectedModel());
-        console.log('[ChatInterface] Modelos disponibles:', this.availableModels());
+        console.log('[ChatInterface] Modelo seleccionado (Ollama id):', model_id);
         await this.chatService.sendMessage({
           message: content,
           conversationId,
-          model: this.selectedModel()
+          model: model_id
         });
       }
     } catch (error) {

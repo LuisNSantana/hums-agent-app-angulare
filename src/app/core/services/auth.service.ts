@@ -3,8 +3,8 @@
  * Contains the full AuthService implementation for compatibility
  */
 
-export { AuthService } from './auth/auth.service';
-export { 
+export { AuthService } from './auth';
+export {
   AuthStateService,
   AuthOperationsService, 
   AuthDataMapper,
