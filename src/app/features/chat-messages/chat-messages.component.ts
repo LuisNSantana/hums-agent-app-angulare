@@ -65,7 +65,9 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
                     <div class="bubble"></div>
                     <div class="bubble"></div>
                   </div>
-                  <span class="typing-text">Agent Hums is thinking...</span>
+                  <span class="typing-text">
+                    <span class="thinking-gradient">Agent Hums is thinking...</span>
+                  </span>
                 </div>
               </div>
             }
@@ -80,6 +82,14 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       overflow-y: auto;
       scroll-behavior: smooth;
       background: var(--background);
+
+      /* Hide scrollbar while keeping scroll functionality */
+      -ms-overflow-style: none;  /* IE and Edge */
+      scrollbar-width: none;     /* Firefox */
+    }
+
+    .messages-container::-webkit-scrollbar {
+      display: none; /* Safari and Chrome */
     }
 
     .messages-content {
@@ -187,6 +197,23 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       font-size: 0.75rem;
       color: var(--muted-foreground);
       margin-left: 0.5rem;
+    }
+
+    .thinking-gradient {
+      background: linear-gradient(90deg, var(--primary), var(--primary-dark), var(--primary));
+      background-size: 200% 200%;
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-fill-color: transparent;
+      animation: gradient-move 2s linear infinite;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    @keyframes gradient-move {
+      0% { background-position: 0% 50%; }
+      100% { background-position: 100% 50%; }
     }
 
     @keyframes fadeIn {

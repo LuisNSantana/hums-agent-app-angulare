@@ -79,7 +79,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       </div>
 
       <!-- Suggestions (when input is empty) -->
-      @if (showSuggestions() && suggestions().length > 0) {
+      @if (showSuggestions() && suggestions().length > 0 && !message()) {
         <div class="suggestions">
           <h4>Suggestions:</h4>
           <div class="suggestion-list">
@@ -109,14 +109,13 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
         </div>
       }
     </div>
-  `,
-  styles: [`    .chat-input-container {
-      background: rgba(255, 255, 255, 0.98);
-      border: 1px solid rgba(229, 231, 235, 0.8);
+  `,  styles: [`    .chat-input-container {
+      background: rgba(20, 20, 32, 0.8);
+      border: 1px solid rgba(60, 60, 78, 0.6);
       border-radius: 16px;
       padding: 20px;
       margin: 16px;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
       backdrop-filter: blur(12px);
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
@@ -142,26 +141,24 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       display: flex;
       align-items: flex-end;
       gap: 12px;
-      background: #f8fafc;
-      border: 2px solid #e2e8f0;
+      background: rgba(30, 30, 44, 0.7);
+      border: 1px solid rgba(70, 70, 90, 0.6);
       border-radius: 12px;
       padding: 12px 16px;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
       &:focus-within {
         border-color: #10a37f;
-        background: #ffffff;
-        box-shadow: 0 0 0 3px rgba(16, 163, 127, 0.1);
+        background: rgba(35, 35, 50, 0.9);
+        box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
       }
-    }
-
-    .attachment-btn {
+    }    .attachment-btn {
       background: none;
       border: none;
       padding: 4px;
       border-radius: 4px;
       cursor: pointer;
-      color: #6c757d;
+      color: #8b8b9c;
       transition: all 0.2s ease;
       display: flex;
       align-items: center;
@@ -173,7 +170,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       }
 
       &:hover:not(:disabled) {
-        background: rgba(16, 163, 127, 0.1);
+        background: rgba(16, 163, 127, 0.2);
         color: #10a37f;
       }
 
@@ -181,9 +178,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
         opacity: 0.5;
         cursor: not-allowed;
       }
-    }
-
-    .message-input {
+    }.message-input {
       flex: 1;
       border: none;
       outline: none;
@@ -192,30 +187,34 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       font-size: 14px;
       line-height: 1.5;
-      color: #212529;
+      color: #e0e0e0;
       min-height: 20px;
       max-height: 200px;
       overflow-y: auto;
+      scrollbar-width: none; /* Firefox */
+      -ms-overflow-style: none; /* IE 10+ */
+      
+      &::-webkit-scrollbar {
+        display: none; /* Chrome, Safari, Edge */
+      }
 
       &::placeholder {
-        color: #6c757d;
+        color: #8b8b9c;
       }
 
       &:disabled {
         color: #6c757d;
         cursor: not-allowed;
       }
-    }
-
-    .char-counter {
+    }    .char-counter {
       font-size: 11px;
-      color: #6c757d;
+      color: #8b8b9c;
       white-space: nowrap;
       align-self: flex-end;
       margin-bottom: 2px;
 
       &.warning {
-        color: #dc3545;
+        color: #ff5a5f;
         font-weight: 500;
       }
     }    .send-btn {
@@ -231,7 +230,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       justify-content: center;
       min-width: 44px;
       height: 44px;
-      box-shadow: 0 2px 8px rgba(16, 163, 127, 0.3);
+      box-shadow: 0 2px 8px rgba(16, 163, 127, 0.4);
 
       svg {
         width: 20px;
@@ -239,9 +238,9 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       }
 
       &:hover:not(:disabled) {
-        background: linear-gradient(135deg, #0d8a6b 0%, #0a6b55 100%);
+        background: linear-gradient(135deg, #13c095 0%, #0e957a 100%);
         transform: translateY(-2px);
-        box-shadow: 0 4px 16px rgba(16, 163, 127, 0.4);
+        box-shadow: 0 4px 16px rgba(16, 163, 127, 0.6);
       }
 
       &:active:not(:disabled) {
@@ -250,8 +249,8 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       }
 
       &:disabled {
-        background: #e2e8f0;
-        color: #94a3b8;
+        background: #3a3a4a;
+        color: #8b8b9c;
         cursor: not-allowed;
         transform: none;
         box-shadow: none;
@@ -271,16 +270,16 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }    .suggestions {
-      margin-top: 20px;
-      padding-top: 20px;
-      border-top: 1px solid #e2e8f0;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid rgba(60, 60, 78, 0.5);
 
       h4 {
         margin: 0 0 16px 0;
         font-size: 14px;
         font-weight: 600;
-        color: #475569;
-        opacity: 0.8;
+        color: #a0a0b0;
+        opacity: 0.9;
       }
     }
 
@@ -294,8 +293,8 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       display: flex;
       align-items: center;
       gap: 12px;
-      background: #f8fafc;
-      border: 2px solid #e2e8f0;
+      background: rgba(42, 42, 54, 0.7);
+      border: 1px solid rgba(70, 70, 90, 0.6);
       border-radius: 10px;
       padding: 12px 16px;
       text-align: left;
@@ -304,10 +303,10 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       font-size: 14px;
 
       &:hover {
-        background: #ffffff;
+        background: rgba(45, 45, 58, 0.9);
         border-color: #10a37f;
         transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(16, 163, 127, 0.15);
+        box-shadow: 0 4px 12px rgba(16, 163, 127, 0.25);
       }
 
       .suggestion-icon {
@@ -316,32 +315,36 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       }
 
       .suggestion-text {
-        color: #475569;
+        color: #d0d0e0;
         font-weight: 500;
         line-height: 1.4;
       }
-    }
-
-    .model-selector {
+    }    .model-selector {
       margin-top: 12px;
       padding-top: 12px;
-      border-top: 1px solid #e9ecef;
+      border-top: 1px solid rgba(60, 60, 78, 0.5);
     }
 
     .model-select {
-      background: #f8f9fa;
-      border: 1px solid #e9ecef;
-      border-radius: 6px;
+      background: rgba(35, 35, 50, 0.8);
+      border: 1px solid rgba(70, 70, 90, 0.6);
+      border-radius: 8px;
       padding: 6px 10px;
       font-size: 12px;
-      color: #495057;
+      color: #d0d0e0;
       cursor: pointer;
       transition: all 0.2s ease;
 
       &:focus {
         outline: none;
         border-color: #10a37f;
-        background: #ffffff;
+        background: rgba(40, 40, 55, 0.9);
+        box-shadow: 0 0 0 2px rgba(16, 163, 127, 0.2);
+      }
+
+      option {
+        background: #23232F;
+        color: #d0d0e0;
       }
     }
 

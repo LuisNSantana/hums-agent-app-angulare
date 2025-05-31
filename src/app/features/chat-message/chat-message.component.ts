@@ -67,7 +67,7 @@ import { ChatMessage } from '../../shared/models/chat.models';
             <div class="message-text" [innerHTML]="formattedContent()"></div>
             
             @if (message().isStreaming) {
-              <div class="streaming-cursor">▊</div>
+              <div class="streaming-cursor" aria-label="AI is typing">▊</div>
             }
           }
         </div>
@@ -273,6 +273,10 @@ import { ChatMessage } from '../../shared/models/chat.models';
       animation: blink 1s infinite;
       color: var(--primary);
       font-weight: bold;
+      font-size: 1.25rem;
+      margin-left: 2px;
+      vertical-align: middle;
+      filter: drop-shadow(0 0 2px var(--primary));
     }
 
     .message-actions {
