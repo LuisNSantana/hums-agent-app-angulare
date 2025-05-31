@@ -9,11 +9,13 @@ import {
   output, 
   signal, 
   computed,
-  effect 
+  effect,
+  inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Conversation } from '../../shared/models/chat.models';
+import { ConfirmationService } from '../../shared/services/confirmation.service';
 
 @Component({
   selector: 'app-chat-sidebar',
@@ -839,6 +841,9 @@ import { Conversation } from '../../shared/models/chat.models';
   `]
 })
 export class ChatSidebarComponent {
+  // Injected services
+  private readonly confirmationService = inject(ConfirmationService);
+
   // Inputs
   readonly conversations = input<Conversation[]>([]);
   readonly currentConversationId = input<string | null>(null);
@@ -891,15 +896,29 @@ export class ChatSidebarComponent {
   onNewConversation(): void {
     this.newConversation.emit();
   }
-
   /**
-   * Handle conversation deletion
+   * Handle conversation deletion with elegant modal
    */
-  onDeleteConversation(conversationId: string, event: Event): void {
+  async onDeleteConversation(conversationId: string, event: Event): Promise<void> {
     event.stopPropagation(); // Prevent conversation selection
     
-    if (confirm('Are you sure you want to delete this conversation?')) {
-      this.deleteConversation.emit(conversationId);
+    // Find the conversation to get its title
+    const conversation = this.conversations().find(c => c.id === conversationId);
+    
+    try {
+      const confirmed = await this.confirmationService.confirmDeleteConversation(
+        conversation?.title
+      );
+      
+      if (confirmed) {
+        this.deleteConversation.emit(conversationId);
+      }
+    } catch (error) {
+      console.error('Error showing confirmation modal:', error);
+      // Fallback to browser confirm if modal fails
+      if (confirm('Are you sure you want to delete this conversation?')) {
+        this.deleteConversation.emit(conversationId);
+      }
     }
   }
 

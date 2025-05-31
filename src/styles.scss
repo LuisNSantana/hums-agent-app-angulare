@@ -47,18 +47,23 @@
   --mat-app-error: #ef4444;
   --mat-app-error-light: #f87171;
   --mat-app-on-error: #ffffff;
-  
-  /* Border and Divider Colors */
+    /* Border and Divider Colors */
   --mat-app-border: rgba(255, 255, 255, 0.12);
   --mat-app-border-variant: rgba(255, 255, 255, 0.16);
+  --mat-app-outline-variant: rgba(255, 255, 255, 0.14);
   --mat-app-divider: rgba(255, 255, 255, 0.08);
   
-  /* Enhanced Shadow System with multiple layers */
+  /* Hover and interaction states */
+  --mat-app-primary-hover: #7c3aed;
+  --mat-app-accent-hover: #9333ea;
+    /* Enhanced Shadow System with multiple layers */
   --mat-app-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
   --mat-app-shadow: 0 4px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.06);
   --mat-app-shadow-md: 0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.06);
   --mat-app-shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1);
+  --mat-app-shadow-xl: 0 24px 48px rgba(0, 0, 0, 0.25), 0 16px 32px rgba(0, 0, 0, 0.15);
   --mat-app-shadow-elevated: 0 20px 40px rgba(0, 0, 0, 0.25), 0 12px 24px rgba(0, 0, 0, 0.12);
+  --mat-app-shadow-text: 0 2px 4px rgba(0, 0, 0, 0.5);
   
   /* Modern Gradient Definitions */
   --mat-app-gradient-primary: linear-gradient(135deg, var(--mat-app-primary), var(--mat-app-primary-light));

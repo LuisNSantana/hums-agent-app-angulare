@@ -9,10 +9,12 @@ import {
   output, 
   ChangeDetectionStrategy,
   signal,
-  computed
+  computed,
+  inject
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../shared/models/chat.models';
+import { AuthService } from '../../core/services/auth/auth.service';
 
 @Component({
   selector: 'app-chat-message',
@@ -20,14 +22,25 @@ import { ChatMessage } from '../../shared/models/chat.models';
   imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="message" [class]="messageClasses()">
-      <!-- Message Avatar -->
+    <div class="message" [class]="messageClasses()">      <!-- Message Avatar -->
       <div class="message-avatar" [class]="message().role">
-        @if (message().role === 'user') {
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-            <circle cx="12" cy="7" r="4"/>
-          </svg>
+        @if (message().role === 'user') {          @if (currentUser()?.avatarUrl; as avatarUrl) {
+            <img 
+              [src]="avatarUrl" 
+              [alt]="currentUser()?.displayName || 'User'"
+              class="avatar-image"
+              (error)="onAvatarError($event)"
+            />
+          } @else {
+            @if (userInitials(); as initials) {
+              <span class="avatar-initials">{{ initials }}</span>
+            } @else {
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                <circle cx="12" cy="7" r="4"/>
+              </svg>
+            }
+          }
         } @else {
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="3"/>
@@ -156,28 +169,27 @@ import { ChatMessage } from '../../shared/models/chat.models';
 
     .message.user .message-content {
       align-items: flex-end;
-    }
-
-    .message.user .message-body {
+    }    .message.user .message-body {
       background: var(--mat-app-gradient-primary);
       color: var(--mat-app-on-primary);
       border-radius: 20px;
       border-bottom-right-radius: 6px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: var(--mat-app-shadow);
-    }
-
-    .message.assistant .message-body {
-      background: var(--mat-app-glass-bg);
-      border: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: var(--mat-app-glass-blur);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      box-shadow: 
+        var(--mat-app-shadow-md),
+        0 4px 20px rgba(99, 102, 241, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    }.message.assistant .message-body {
+      background: var(--mat-app-surface-container-high);
+      border: 1px solid var(--mat-app-border-variant);
       border-radius: 20px;
       border-bottom-left-radius: 6px;
       color: var(--mat-app-on-surface);
-      box-shadow: var(--mat-app-shadow);
-    }
-
-    .message-avatar {
+      box-shadow: 
+        var(--mat-app-shadow),
+        0 2px 16px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    }    .message-avatar {
       width: 40px;
       height: 40px;
       border-radius: 50%;
@@ -190,11 +202,28 @@ import { ChatMessage } from '../../shared/models/chat.models';
       box-shadow: var(--mat-app-shadow);
       border: 2px solid rgba(255, 255, 255, 0.1);
       transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
     }
 
-    .message-avatar.user {
-      background: var(--mat-app-surface-variant);
+    .avatar-image {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 50%;
+    }    .avatar-initials {
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+
+    .message-avatar.avatar-error .avatar-image {
+      display: none !important;
+    }.message-avatar.user {
+      background: var(--mat-app-gradient-surface);
       color: var(--mat-app-on-surface-variant);
+      border: 2px solid var(--mat-app-border-variant);
     }
 
     .message-avatar.assistant {
@@ -246,9 +275,7 @@ import { ChatMessage } from '../../shared/models/chat.models';
       font-size: 10px;
       font-weight: 600;
       border: 1px solid var(--mat-app-border);
-    }
-
-    .message-body {
+    }    .message-body {
       padding: 16px 20px;
       position: relative;
       word-wrap: break-word;
@@ -257,18 +284,25 @@ import { ChatMessage } from '../../shared/models/chat.models';
       transition: all 0.3s ease;
     }
 
-    .message-body:hover {
+    .message.assistant .message-body:hover {
       transform: translateY(-1px);
-      box-shadow: var(--mat-app-shadow-md);
+      box-shadow: 
+        var(--mat-app-shadow-md),
+        0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .message.user .message-body:hover {
+      transform: translateY(-1px);
+      box-shadow: 
+        var(--mat-app-shadow-lg),
+        0 6px 24px rgba(99, 102, 241, 0.5);
     }
 
     .message-text {
       color: inherit;
-    }
-
-    .message-text :global(pre) {
-      background: var(--mat-app-surface-container);
-      border: 1px solid var(--mat-app-border);
+    }    .message-text :global(pre) {
+      background: var(--mat-app-surface-elevated);
+      border: 1px solid var(--mat-app-border-variant);
       border-radius: 12px;
       padding: 16px;
       overflow-x: auto;
@@ -276,15 +310,17 @@ import { ChatMessage } from '../../shared/models/chat.models';
       font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       font-size: 14px;
       box-shadow: var(--mat-app-shadow-sm);
+      color: var(--mat-app-on-surface);
     }
 
     .message-text :global(code) {
-      background: var(--mat-app-surface-variant);
+      background: var(--mat-app-surface-elevated);
       padding: 2px 6px;
       border-radius: 6px;
       font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
       font-size: 13px;
       border: 1px solid var(--mat-app-border);
+      color: var(--mat-app-accent-light);
     }
 
     .message-text :global(p) {
@@ -303,18 +339,17 @@ import { ChatMessage } from '../../shared/models/chat.models';
     .message-text :global(em) {
       color: var(--mat-app-secondary);
       font-style: italic;
-    }
-
-    .error-content {
+    }    .error-content {
       display: flex;
       align-items: center;
       gap: 8px;
-      color: var(--mat-app-error);
+      color: var(--mat-app-error-light);
       font-weight: 500;
-      background: rgba(239, 68, 68, 0.1);
-      border: 1px solid rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       border-radius: 8px;
       padding: 12px;
+      box-shadow: var(--mat-app-shadow-sm);
     }
 
     .streaming-indicator {
@@ -354,21 +389,19 @@ import { ChatMessage } from '../../shared/models/chat.models';
     .message:hover .message-actions {
       opacity: 1;
       transform: translateY(0);
-    }
-
-    .action-button {
+    }    .action-button {
       display: flex;
       align-items: center;
       justify-content: center;
       width: 32px;
       height: 32px;
-      background: var(--mat-app-surface-variant);
-      border: 1px solid var(--mat-app-border);
+      background: var(--mat-app-surface-elevated);
+      border: 1px solid var(--mat-app-border-variant);
       border-radius: 8px;
       color: var(--mat-app-on-surface-variant);
       cursor: pointer;
       transition: all 0.2s ease;
-      backdrop-filter: blur(10px);
+      box-shadow: var(--mat-app-shadow-sm);
     }
 
     .action-button:hover {
@@ -386,13 +419,12 @@ import { ChatMessage } from '../../shared/models/chat.models';
       color: var(--mat-app-on-surface-muted);
       margin-top: 4px;
       font-weight: 500;
-    }
-
-    .metadata-item {
-      background: var(--mat-app-surface-variant);
+    }    .metadata-item {
+      background: var(--mat-app-surface-elevated);
       padding: 2px 6px;
       border-radius: 4px;
       border: 1px solid var(--mat-app-border);
+      color: var(--mat-app-on-surface-variant);
     }
 
     .agent-thoughts {
@@ -401,16 +433,13 @@ import { ChatMessage } from '../../shared/models/chat.models';
       color: var(--mat-app-on-surface-variant);
       align-self: flex-start;
       width: auto;
-    }
-
-    .agent-thoughts summary {
+    }    .agent-thoughts summary {
       cursor: pointer;
       font-weight: 600;
       padding: 8px 12px;
       border-radius: 12px;
-      background: var(--mat-app-glass-bg);
-      border: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: var(--mat-app-glass-blur);
+      background: var(--mat-app-surface-variant);
+      border: 1px solid var(--mat-app-border);
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -431,12 +460,10 @@ import { ChatMessage } from '../../shared/models/chat.models';
       color: var(--mat-app-on-primary);
       border-bottom-left-radius: 4px;
       border-bottom-right-radius: 4px;
-    }
-
-    .agent-thoughts .thought-text {
+    }    .agent-thoughts .thought-text {
       padding: 16px;
-      background: var(--mat-app-surface-container);
-      border: 1px solid var(--mat-app-border);
+      background: var(--mat-app-surface-elevated);
+      border: 1px solid var(--mat-app-border-variant);
       border-top: none;
       border-radius: 0 0 12px 12px;
       white-space: pre-wrap;
@@ -518,6 +545,9 @@ import { ChatMessage } from '../../shared/models/chat.models';
   `]
 })
 export class ChatMessageComponent {
+  // Services
+  private readonly authService = inject(AuthService);
+
   // Modern Angular 20+ input/output syntax
   readonly message = input.required<ChatMessage>();
   readonly messageAction = output<{
@@ -527,6 +557,31 @@ export class ChatMessageComponent {
   }>();
 
   readonly showMetadata = signal(false);
+  // User data computed signals
+  readonly currentUser = computed(() => {
+    const user = this.authService.user();
+    console.log('🔍 Debug - Current user in chat message:', user);
+    return user;
+  });
+  
+  readonly userInitials = computed(() => {
+    const user = this.currentUser();
+    if (!user) return null;
+    
+    console.log('🔍 Debug - User avatar URL:', user.avatarUrl);
+    console.log('🔍 Debug - User display name:', user.displayName);
+    
+    if (user.displayName) {
+      const names = user.displayName.trim().split(' ');
+      if (names.length >= 2) {
+        return (names[0].charAt(0) + names[names.length - 1].charAt(0)).toUpperCase();
+      } else {
+        return names[0].charAt(0).toUpperCase();
+      }
+    }
+    
+    return user.email?.charAt(0).toUpperCase() || null;
+  });
 
   readonly messageClasses = computed(() => {
     const msg = this.message();
@@ -576,11 +631,21 @@ export class ChatMessageComponent {
       messageId: this.message().id
     });
   }
-
   onEdit(): void {
     this.messageAction.emit({
       type: 'edit',
       messageId: this.message().id
     });
+  }
+  onAvatarError(event: Event): void {
+    console.log('🚨 Avatar image failed to load:', event);
+    const imgElement = event.target as HTMLImageElement;
+    imgElement.style.display = 'none';
+    
+    // Force update to show fallback
+    const userElement = imgElement.closest('.message-avatar');
+    if (userElement) {
+      userElement.classList.add('avatar-error');
+    }
   }
 }

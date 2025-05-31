@@ -75,15 +75,11 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
         }
       </div>
     </div>
-  `,  styles: [`
-    .messages-container {
+  `,  styles: [`    .messages-container {
       flex: 1;
       overflow-y: auto;
       scroll-behavior: smooth;
       background: var(--mat-app-background);
-      background-image: 
-        radial-gradient(circle at 20% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
       position: relative;
     }
 
@@ -120,9 +116,7 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       max-width: 800px;
       margin: 0 auto;
       width: 100%;
-    }
-
-    .empty-state {
+    }    .empty-state {
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -130,9 +124,8 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       height: 100%;
       text-align: center;
       padding: 48px 24px;
-      background: var(--mat-app-glass-bg);
-      border: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: var(--mat-app-glass-blur);
+      background: var(--mat-app-surface-container);
+      border: 1px solid var(--mat-app-border);
       border-radius: 24px;
       margin: 48px auto;
       max-width: 500px;
@@ -202,16 +195,13 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       display: flex;
       flex-direction: column;
       gap: 8px;
-    }
-
-    .typing-bubbles {
+    }    .typing-bubbles {
       display: flex;
       align-items: center;
       gap: 6px;
       padding: 16px 20px;
-      background: var(--mat-app-glass-bg);
-      border: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: var(--mat-app-glass-blur);
+      background: var(--mat-app-surface-container-high);
+      border: 1px solid var(--mat-app-border);
       border-radius: 20px;
       border-bottom-left-radius: 6px;
       width: fit-content;

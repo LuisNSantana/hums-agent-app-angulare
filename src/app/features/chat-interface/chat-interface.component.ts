@@ -115,8 +115,7 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
         ></div>
       }
     </div>
-  `,  styles: [`
-    .chat-interface {
+  `,  styles: [`    .chat-interface {
       display: flex;
       height: 100vh;
       background: var(--mat-app-background);
@@ -125,33 +124,14 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
       overflow: hidden;
-
-      /* Background pattern overlay */
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: 
-          radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 40%),
-          radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
-          radial-gradient(circle at 40% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
-        pointer-events: none;
-        z-index: 0;
-      }
-    }
-
-    .chat-main {
+    }    .chat-main {
       flex: 1;
       display: flex;
       flex-direction: column;
       min-width: 0;
       background: transparent;
       position: relative;
-      z-index: 1;
-    }    .chat-content {
+    }.chat-content {
       flex: 1;
       overflow-y: auto;
       display: flex;
@@ -185,20 +165,17 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
       padding: 2rem 1rem;
       position: relative;
       min-height: 60vh;
-    }
-
-    .welcome-content {
+    }    .welcome-content {
       text-align: center;
       max-width: 600px;
       width: 100%;
       animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
       position: relative;
       padding: 32px 24px;
-      background: var(--mat-app-glass-bg);
+      background: var(--mat-app-surface-container);
       border-radius: 24px;
-      border: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: blur(var(--mat-app-glass-blur));
-      box-shadow: var(--mat-app-shadow-xl);
+      border: 1px solid var(--mat-app-border);
+      box-shadow: var(--mat-app-shadow-lg);
 
       &::before {
         content: '';
@@ -212,7 +189,7 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
         border-radius: 24px;
         pointer-events: none;
       }
-    }    .welcome-icon {
+    }.welcome-icon {
       color: var(--mat-app-accent);
       margin-bottom: 24px;
       opacity: 0.9;
