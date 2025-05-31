@@ -226,6 +226,16 @@ export class SystemPromptsService {
       processedTemplate += `\n\n## USER CONTEXT\n${context.userContext}`;
     }
 
+    // Inject user's name if available
+    if (context.userName) {
+      processedTemplate = processedTemplate.replace(/AGENT_HUMS_USER_NAME/g, context.userName);
+      // Add a section for user's name if not already in template, or ensure it's mentioned.
+      // This is a simple way, more sophisticated templating might be needed for complex prompts.
+      if (!template.includes("Your user's name is") && !template.includes("Call the user")) {
+        processedTemplate += `\n\n## USER IDENTIFICATION\nYou are speaking with ${context.userName}. Please address them by their name when appropriate.`;
+      }
+    }
+
     // Inject conversation context
     if (context.conversationContext) {
       processedTemplate += `\n\n## CONVERSATION CONTEXT\n${context.conversationContext}`;

@@ -1,5 +1,322 @@
 /* You can add global styles to this file, and also import other style files */
 
+/* Import Angular Material dark theme */
+@import "@angular/material/prebuilt-themes/indigo-pink.css";
+
+/* ===== MODERN DARK THEME FOR ANGULAR MATERIAL ===== */
+
+/* Advanced Material Design Dark Theme with modern colors and gradients */
+:root {
+  /* Core Background Colors - Deep, rich dark theme */
+  --mat-app-background: #050505;
+  --mat-app-surface: #111111;
+  --mat-app-surface-variant: #1e1e1e;
+  --mat-app-surface-container: #191919;
+  --mat-app-surface-container-high: #212121;
+  --mat-app-surface-elevated: #161616;
+  
+  /* Text Colors - High contrast for accessibility */
+  --mat-app-on-surface: #ffffff;
+  --mat-app-on-surface-variant: #d0d0d0;
+  --mat-app-on-surface-muted: #9a9a9a;
+  --mat-app-text-secondary: #b3b3b3;
+  
+  /* Brand Colors - Modern gradient-ready palette */
+  --mat-app-primary: #6366f1;  --mat-app-primary-variant: #4f46e5;
+  --mat-app-primary-light: #818cf8;
+  --mat-app-primary-dark: #3730a3;
+  --mat-app-on-primary: #ffffff;
+  
+  /* Secondary Colors - Modern cyan/emerald blend */
+  --mat-app-secondary: #10b981;
+  --mat-app-secondary-variant: #059669;
+  --mat-app-secondary-light: #34d399;
+  --mat-app-on-secondary: #ffffff;
+  
+  /* Accent Colors - Purple gradient tones */
+  --mat-app-accent: #8b5cf6;
+  --mat-app-accent-light: #a78bfa;
+  --mat-app-accent-dark: #7c3aed;
+  --mat-app-on-accent: #ffffff;
+  
+  /* Status Colors */
+  --mat-app-success: #10b981;
+  --mat-app-success-light: #34d399;
+  --mat-app-warning: #f59e0b;
+  --mat-app-warning-light: #fbbf24;
+  --mat-app-error: #ef4444;
+  --mat-app-error-light: #f87171;
+  --mat-app-on-error: #ffffff;
+  
+  /* Border and Divider Colors */
+  --mat-app-border: rgba(255, 255, 255, 0.12);
+  --mat-app-border-variant: rgba(255, 255, 255, 0.16);
+  --mat-app-divider: rgba(255, 255, 255, 0.08);
+  
+  /* Enhanced Shadow System with multiple layers */
+  --mat-app-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --mat-app-shadow: 0 4px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.06);
+  --mat-app-shadow-md: 0 8px 16px rgba(0, 0, 0, 0.15), 0 4px 8px rgba(0, 0, 0, 0.06);
+  --mat-app-shadow-lg: 0 16px 32px rgba(0, 0, 0, 0.2), 0 8px 16px rgba(0, 0, 0, 0.1);
+  --mat-app-shadow-elevated: 0 20px 40px rgba(0, 0, 0, 0.25), 0 12px 24px rgba(0, 0, 0, 0.12);
+  
+  /* Modern Gradient Definitions */
+  --mat-app-gradient-primary: linear-gradient(135deg, var(--mat-app-primary), var(--mat-app-primary-light));
+  --mat-app-gradient-secondary: linear-gradient(135deg, var(--mat-app-secondary), var(--mat-app-secondary-light));
+  --mat-app-gradient-surface: linear-gradient(145deg, var(--mat-app-surface), var(--mat-app-surface-variant));
+  --mat-app-gradient-accent: linear-gradient(135deg, var(--mat-app-primary), var(--mat-app-accent));
+  --mat-app-gradient-hero: linear-gradient(135deg, var(--mat-app-primary) 0%, var(--mat-app-accent) 50%, var(--mat-app-secondary) 100%);
+  
+  /* Glass morphism effects */
+  --mat-app-glass-bg: rgba(255, 255, 255, 0.05);
+  --mat-app-glass-border: rgba(255, 255, 255, 0.1);
+  --mat-app-glass-blur: blur(20px);
+  
+  /* Animation and transition variables */
+  --mat-app-transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  --mat-app-transition-normal: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --mat-app-transition-slow: 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ===== GLOBAL STYLES ===== */
+
+/* Base HTML and Body styling */
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Roboto', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: var(--mat-app-background);
+  color: var(--mat-app-on-surface);
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mat-app-surface-variant) var(--mat-app-background);
+}
+
+/* Webkit Scrollbar Styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--mat-app-background);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--mat-app-surface-variant);
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mat-app-primary);
+}
+
+/* Text Selection */
+::selection {
+  background: rgba(99, 102, 241, 0.3);
+  color: var(--mat-app-on-primary);
+}
+
+/* Focus Outline */
+*:focus-visible {
+  outline: 2px solid var(--mat-app-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ===== MATERIAL COMPONENT OVERRIDES ===== */
+
+/* Material Card Enhancements */
+.mat-mdc-card {
+  background: var(--mat-app-surface) !important;
+  color: var(--mat-app-on-surface) !important;
+  border-radius: 16px !important;
+  box-shadow: var(--mat-app-shadow) !important;
+  border: 1px solid var(--mat-app-border) !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.mat-mdc-card:hover {
+  box-shadow: var(--mat-app-shadow-md) !important;
+  transform: translateY(-2px) !important;
+  border-color: var(--mat-app-border-variant) !important;
+}
+
+.mat-mdc-card-header {
+  background: var(--mat-app-gradient-surface) !important;
+  border-radius: 16px 16px 0 0 !important;
+  margin: -16px -16px 16px -16px !important;
+  padding: 24px !important;
+}
+
+/* Material Form Field Enhancements */
+.mat-mdc-form-field {
+  --mdc-outlined-text-field-outline-color: var(--mat-app-border);
+  --mdc-outlined-text-field-hover-outline-color: var(--mat-app-border-variant);
+  --mdc-outlined-text-field-focus-outline-color: var(--mat-app-primary);
+  --mdc-outlined-text-field-label-text-color: var(--mat-app-on-surface-variant);
+  --mdc-outlined-text-field-input-text-color: var(--mat-app-on-surface);
+  --mdc-outlined-text-field-supporting-text-color: var(--mat-app-on-surface-muted);
+  --mdc-outlined-text-field-error-focus-outline-color: var(--mat-app-error);
+  --mdc-outlined-text-field-error-hover-outline-color: var(--mat-app-error-light);
+  --mdc-outlined-text-field-error-outline-color: var(--mat-app-error);
+  margin-bottom: 8px !important;
+}
+
+.mat-mdc-form-field.mat-focused {
+  --mdc-outlined-text-field-label-text-color: var(--mat-app-primary);
+}
+
+/* Material Input Enhancements */
+.mat-mdc-input-element {
+  color: var(--mat-app-on-surface) !important;
+  caret-color: var(--mat-app-primary) !important;
+}
+
+.mat-mdc-input-element::placeholder {
+  color: var(--mat-app-on-surface-muted) !important;
+}
+
+/* Material Select Enhancements */
+.mat-mdc-select {
+  color: var(--mat-app-on-surface) !important;
+}
+
+.mat-mdc-select-panel {
+  background: var(--mat-app-surface-container) !important;
+  border: 1px solid var(--mat-app-border) !important;
+  border-radius: 12px !important;
+  box-shadow: var(--mat-app-shadow-lg) !important;
+  backdrop-filter: blur(20px) !important;
+}
+
+.mat-mdc-option {
+  color: var(--mat-app-on-surface) !important;
+  border-radius: 8px !important;
+  margin: 4px 8px !important;
+  transition: all 0.2s ease !important;
+}
+
+.mat-mdc-option:hover {
+  background: var(--mat-app-surface-variant) !important;
+  transform: translateX(4px) !important;
+}
+
+.mat-mdc-option.mdc-list-item--selected {
+  background: rgba(99, 102, 241, 0.1) !important;
+  color: var(--mat-app-primary) !important;
+}
+
+/* Material Button Enhancements */
+.mat-mdc-button-base {
+  border-radius: 12px !important;
+  font-weight: 500 !important;
+  text-transform: none !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  backdrop-filter: blur(10px) !important;
+}
+
+.mat-mdc-raised-button {
+  box-shadow: var(--mat-app-shadow) !important;
+}
+
+.mat-mdc-raised-button:hover {
+  box-shadow: var(--mat-app-shadow-md) !important;
+  transform: translateY(-1px) !important;
+}
+
+.mat-mdc-raised-button.mat-primary {
+  background: var(--mat-app-gradient-primary) !important;
+  color: var(--mat-app-on-primary) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.mat-mdc-raised-button.mat-accent {
+  background: var(--mat-app-gradient-secondary) !important;
+  color: var(--mat-app-on-secondary) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.mat-mdc-raised-button.mat-warn {
+  background: linear-gradient(135deg, var(--mat-app-error), var(--mat-app-error-light)) !important;
+  color: var(--mat-app-on-error) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+.mat-mdc-outlined-button {
+  border: 2px solid var(--mat-app-primary) !important;
+  color: var(--mat-app-primary) !important;
+  background: rgba(99, 102, 241, 0.05) !important;
+}
+
+.mat-mdc-outlined-button:hover {
+  background: rgba(99, 102, 241, 0.1) !important;
+  border-color: var(--mat-app-primary-light) !important;
+  color: var(--mat-app-primary-light) !important;
+}
+
+/* Material Fab Button */
+.mat-mdc-fab {
+  background: var(--mat-app-gradient-primary) !important;
+  color: var(--mat-app-on-primary) !important;
+  box-shadow: var(--mat-app-shadow-md) !important;
+}
+
+.mat-mdc-fab:hover {
+  box-shadow: var(--mat-app-shadow-lg) !important;
+  transform: scale(1.05) !important;
+}
+
+/* Material Tab overrides */
+.mat-mdc-tab-group {
+  background-color: transparent !important;
+}
+
+.mat-mdc-tab-header {
+  background-color: var(--mat-app-surface-variant) !important;
+}
+
+.mat-mdc-tab {
+  color: var(--mat-app-on-surface-variant) !important;
+}
+
+.mat-mdc-tab.mdc-tab--active {
+  color: var(--mat-app-primary) !important;
+}
+
+/* Material Toolbar overrides */
+.mat-toolbar {
+  background-color: var(--mat-app-surface) !important;
+  color: var(--mat-app-on-surface) !important;
+}
+
+/* Material Snackbar overrides */
+.mat-mdc-snack-bar-container {
+  border-radius: 8px !important;
+}
+
+/* Scrollbar styling for dark theme */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--mat-app-surface);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--mat-app-surface-variant);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--mat-app-on-surface-variant);
+}
+
 /* ===== GLOBAL STYLES - AGENT HUMS APP ===== */
 
 /* CSS Reset and Base Styles */
@@ -382,3 +699,6 @@ $large: 1280px;
 .js-focus-visible :focus:not(.focus-visible) {
   outline: none;
 }
+
+html, body { height: 100%; }
+body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }

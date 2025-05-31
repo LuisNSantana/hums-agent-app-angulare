@@ -151,47 +151,74 @@ export class ProfileService implements IProfileService {
       // Sanitize and validate updates
       const sanitizedUpdates = this.authDataMapper.sanitizeProfileUpdate(updates);
 
-      // Update auth metadata if needed
-      if (sanitizedUpdates.displayName || sanitizedUpdates.avatarUrl) {
-        const { error: authError } = await this.supabase.auth.updateUser({
-          data: {
-            display_name: sanitizedUpdates.displayName,
-            avatar_url: sanitizedUpdates.avatarUrl
-          }
-        });
+      // Update auth metadata if needed (displayName, avatarUrl are typically in auth.users table)
+      const authMetadataUpdate: any = {}; // Explicitly type if possible, e.g., { data: UserMetadata }
+      let userMetadataChanged = false;
 
+      if (sanitizedUpdates.displayName) {
+        authMetadataUpdate.data = { ...authMetadataUpdate.data, display_name: sanitizedUpdates.displayName };
+        userMetadataChanged = true;
+      }
+      if (sanitizedUpdates.avatarUrl) {
+        authMetadataUpdate.data = { ...authMetadataUpdate.data, avatar_url: sanitizedUpdates.avatarUrl };
+        userMetadataChanged = true;
+      }
+      if (sanitizedUpdates.nickname) { // Assuming nickname can be stored in user_metadata
+         authMetadataUpdate.data = { ...authMetadataUpdate.data, nickname: sanitizedUpdates.nickname };
+         userMetadataChanged = true;
+      }
+
+      if (userMetadataChanged) {
+        const { error: authError } = await this.supabase.auth.updateUser(authMetadataUpdate);
         if (authError) {
-          console.error('[ProfileService] Error updating auth metadata:', authError);
+          console.error('[ProfileService] Error updating auth user metadata:', authError);
           return { error: authError.message };
         }
       }
 
-      // Update profile table
-      const profileUpdate: any = {
+      // Update profile table (this is where bio, and other custom fields would go)
+      const profileTableUpdate: any = {
         updated_at: new Date().toISOString()
       };
+      let profileTableChanged = false;
 
+      // These might be redundant if also in user_metadata, adjust based on your DB schema
       if (sanitizedUpdates.displayName !== undefined) {
-        profileUpdate.display_name = sanitizedUpdates.displayName;
+        profileTableUpdate.display_name = sanitizedUpdates.displayName;
+        profileTableChanged = true;
       }
-
+      if (sanitizedUpdates.nickname !== undefined) { 
+        profileTableUpdate.nickname = sanitizedUpdates.nickname;
+        profileTableChanged = true;
+      }
       if (sanitizedUpdates.avatarUrl !== undefined) {
-        profileUpdate.avatar_url = sanitizedUpdates.avatarUrl;
+        profileTableUpdate.avatar_url = sanitizedUpdates.avatarUrl;
+        profileTableChanged = true;
       }
-
+      if (sanitizedUpdates.bio !== undefined) { 
+        profileTableUpdate.bio = sanitizedUpdates.bio;
+        profileTableChanged = true;
+      }
       if (sanitizedUpdates.preferences !== undefined) {
-        profileUpdate.preferences = this.authDataMapper.preferencesToJson(sanitizedUpdates.preferences);
+        profileTableUpdate.preferences = this.authDataMapper.preferencesToJson(sanitizedUpdates.preferences);
+        profileTableChanged = true;
       }
 
-      const { error: profileError } = await this.supabase
-        .from('profiles')
-        .update(profileUpdate)
-        .eq('id', currentUser.id);
+      if (profileTableChanged) {
+        const { error: profileError } = await this.supabase
+          .from('profiles')
+          .update(profileTableUpdate)
+          .eq('id', currentUser.id);
 
-      if (profileError) {
-        console.error('[ProfileService] Error updating profile:', profileError);
-        return { error: profileError.message };
+        if (profileError) {
+          console.error('[ProfileService] Error updating profile table:', profileError);
+          return { error: profileError.message };
+        }
       }
+
+      // The user state should ideally be refreshed by AuthStateService listening to onAuthStateChange or similar
+      // Forcing a refresh here might be an option if direct state update is needed and not handled reactively.
+      // await this.authStateService.refreshUser(); // Or similar method if it exists
 
       console.log('[ProfileService] Profile updated successfully for user:', currentUser.id);
       return { error: null };
@@ -216,7 +243,7 @@ export class ProfileService implements IProfileService {
       const currentPreferences = currentUser.preferences || this.authDataMapper.getDefaultPreferences();
       const updatedPreferences = { ...currentPreferences, ...preferences };
 
-      // Validate preferences
+      // Validate preferences (AuthDataMapper should handle new fields like communicationStyle, interests)
       const validatedPreferences = this.authDataMapper.preferencesToJson(updatedPreferences);
 
       const { error } = await this.supabase

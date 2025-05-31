@@ -115,15 +115,32 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
         ></div>
       }
     </div>
-  `,
-  styles: [`
+  `,  styles: [`
     .chat-interface {
       display: flex;
       height: 100vh;
-      background: var(--background);
-      color: var(--foreground);
+      background: var(--mat-app-background);
+      color: var(--mat-app-on-surface);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+
+      /* Background pattern overlay */
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: 
+          radial-gradient(circle at 20% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 40%),
+          radial-gradient(circle at 80% 80%, rgba(59, 130, 246, 0.08) 0%, transparent 40%),
+          radial-gradient(circle at 40% 60%, rgba(139, 92, 246, 0.05) 0%, transparent 40%);
+        pointer-events: none;
+        z-index: 0;
+      }
     }
 
     .chat-main {
@@ -131,80 +148,166 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
       display: flex;
       flex-direction: column;
       min-width: 0;
-      background: var(--background);
-    }
-
-    .chat-content {
-      flex: 1;
-      /* overflow: hidden; */ /* Cambiado para permitir el scroll del hijo */
-      overflow-y: auto; /* Permitir scroll vertical si el contenido excede */
-      display: flex; /* Para que app-chat-messages pueda crecer */
-      flex-direction: column; /* Para que app-chat-messages pueda crecer */
+      background: transparent;
       position: relative;
-    }
+      z-index: 1;
+    }    .chat-content {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      scrollbar-width: thin;
+      scrollbar-color: var(--mat-app-accent-hover) transparent;
+      padding: 0;
 
-    .welcome-screen {
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      &::-webkit-scrollbar-track {
+        background: transparent;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: var(--mat-app-accent-hover);
+        border-radius: 3px;
+        
+        &:hover {
+          background: var(--mat-app-accent);
+        }
+      }
+    }.welcome-screen {
       display: flex;
       align-items: center;
       justify-content: center;
       height: 100%;
-      padding: 2rem;
+      padding: 2rem 1rem;
+      position: relative;
+      min-height: 60vh;
     }
 
     .welcome-content {
       text-align: center;
-      max-width: 500px;
-      animation: fadeInUp 0.6s ease-out;
+      max-width: 600px;
+      width: 100%;
+      animation: fadeInUp 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      padding: 32px 24px;
+      background: var(--mat-app-glass-bg);
+      border-radius: 24px;
+      border: 1px solid var(--mat-app-glass-border);
+      backdrop-filter: blur(var(--mat-app-glass-blur));
+      box-shadow: var(--mat-app-shadow-xl);
+
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: var(--mat-app-gradient-hero);
+        opacity: 0.02;
+        border-radius: 24px;
+        pointer-events: none;
+      }
+    }    .welcome-icon {
+      color: var(--mat-app-accent);
+      margin-bottom: 24px;
+      opacity: 0.9;
+      filter: drop-shadow(0 4px 8px rgba(139, 92, 246, 0.3));
+      
+      svg {
+        animation: iconFloat 3s ease-in-out infinite;
+        width: 56px;
+        height: 56px;
+      }
     }
 
-    .welcome-icon {
-      color: var(--primary);
-      margin-bottom: 2rem;
-      opacity: 0.8;
-    }
-
-    .welcome-title {
+    @keyframes iconFloat {
+      0%, 100% { 
+        transform: translateY(0px) scale(1); 
+      }
+      50% { 
+        transform: translateY(-8px) scale(1.05); 
+      }
+    }    .welcome-title {
       font-size: 2.5rem;
-      font-weight: 700;
-      margin-bottom: 1rem;
-      background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-      -webkit-background-clip: text;
+      font-weight: 800;
+      margin-bottom: 16px;
+      background: var(--mat-app-gradient-hero);
       background-clip: text;
+      -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-      line-height: 1.2;
+      line-height: 1.1;
+      letter-spacing: -0.02em;
+      text-shadow: var(--mat-app-shadow-text);
     }
 
     .welcome-subtitle {
-      font-size: 1.125rem;
-      color: var(--muted-foreground);
-      margin-bottom: 2.5rem;
-      line-height: 1.6;
+      font-size: 1.1rem;
+      color: var(--mat-app-on-surface-variant);
+      margin-bottom: 32px;
+      line-height: 1.5;
+      font-weight: 500;
+      opacity: 0.9;
     }
 
     .welcome-button {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.875rem 1.5rem;
-      background: var(--primary);
-      color: var(--primary-foreground);
+      gap: 12px;
+      padding: 16px 32px;
+      background: var(--mat-app-gradient-hero);
+      color: white;
       border: none;
-      border-radius: 0.75rem;
-      font-size: 1rem;
-      font-weight: 600;
+      border-radius: 16px;
+      font-size: 1.1rem;
+      font-weight: 700;
       cursor: pointer;
-      transition: all 0.2s ease;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    }
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      box-shadow: var(--mat-app-shadow-lg);
+      position: relative;
+      overflow: hidden;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
 
-    .welcome-button:hover {
-      background: var(--primary-dark);
-      transform: translateY(-2px);
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    }
+      &::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, 
+          transparent 0%, 
+          rgba(255, 255, 255, 0.2) 50%, 
+          transparent 100%);
+        transition: left 0.5s ease;
+      }
 
-    .welcome-button:active {
-      transform: translateY(0);
+      svg {
+        transition: all 0.3s ease;
+        filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+      }
+
+      &:hover {
+        transform: translateY(-4px) scale(1.02);
+        box-shadow: var(--mat-app-shadow-xl);
+
+        &::before {
+          left: 100%;
+        }
+
+        svg {
+          transform: scale(1.1) rotate(90deg);
+        }
+      }
+
+      &:active {
+        transform: translateY(-2px) scale(1.01);
+      }
     }
 
     .mobile-overlay {
@@ -213,19 +316,45 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
       left: 0;
       right: 0;
       bottom: 0;
-      background: rgba(0, 0, 0, 0.5);
+      background: rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(4px);
       z-index: 40;
       display: none;
+      animation: fadeIn 0.3s ease;
     }
 
     @keyframes fadeInUp {
       from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(40px) scale(0.95);
       }
       to {
         opacity: 1;
-        transform: translateY(0);
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+      }
+      to {
+        opacity: 1;
+      }
+    }    @media (max-width: 1024px) {
+      .welcome-content {
+        max-width: 500px;
+        padding: 28px 20px;
+        border-radius: 20px;
+      }
+
+      .welcome-title {
+        font-size: 2.25rem;
+      }
+
+      .welcome-subtitle {
+        font-size: 1.05rem;
+        margin-bottom: 28px;
       }
     }
 
@@ -234,42 +363,226 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
         display: block;
       }
 
+      .welcome-screen {
+        padding: 1.5rem 1rem;
+        min-height: 50vh;
+      }
+
+      .welcome-content {
+        padding: 24px 20px;
+        margin: 0 8px;
+        border-radius: 18px;
+        max-width: 100%;
+
+        &::before {
+          border-radius: 18px;
+        }
+      }
+
+      .welcome-icon {
+        margin-bottom: 20px;
+        
+        svg {
+          width: 48px;
+          height: 48px;
+        }
+      }
+
       .welcome-title {
         font-size: 2rem;
+        margin-bottom: 14px;
       }
 
       .welcome-subtitle {
         font-size: 1rem;
+        margin-bottom: 24px;
+        line-height: 1.4;
+      }
+
+      .welcome-button {
+        padding: 12px 24px;
+        font-size: 0.95rem;
+        border-radius: 14px;
+        gap: 10px;
       }
     }
 
-    /* CSS Variables for theming */
-    :host {
-      --background: #ffffff;
-      --foreground: #0f172a;
-      --muted-foreground: #64748b;
-      --primary: #3b82f6;
-      --primary-dark: #2563eb;
-      --primary-foreground: #ffffff;
-      --border: #e2e8f0;
-      --input: #f1f5f9;
-      --card: #ffffff;
-      --card-foreground: #0f172a;
-      --radius: 0.5rem;
+    @media (max-width: 600px) {
+      .welcome-screen {
+        padding: 1rem 0.75rem;
+      }
+
+      .welcome-content {
+        padding: 20px 16px;
+        margin: 0 4px;
+        border-radius: 16px;
+      }
+
+      .welcome-title {
+        font-size: 1.75rem;
+      }
+
+      .welcome-subtitle {
+        font-size: 0.95rem;
+        margin-bottom: 20px;
+      }
     }
 
-    @media (prefers-color-scheme: dark) {
-      :host {
-        --background: #0f172a;
-        --foreground: #f8fafc;
-        --muted-foreground: #94a3b8;
-        --primary: #3b82f6;
-        --primary-dark: #2563eb;
-        --primary-foreground: #ffffff;
-        --border: #334155;
-        --input: #1e293b;
-        --card: #1e293b;
-        --card-foreground: #f8fafc;
+    @media (max-width: 480px) {
+      .welcome-screen {
+        padding: 1rem 0.5rem;
+        min-height: 45vh;
+      }
+
+      .welcome-content {
+        padding: 18px 14px;
+        border-radius: 14px;
+      }
+
+      .welcome-icon {
+        margin-bottom: 16px;
+        
+        svg {
+          width: 40px;
+          height: 40px;
+        }
+      }
+
+      .welcome-title {
+        font-size: 1.5rem;
+        margin-bottom: 12px;
+      }
+
+      .welcome-subtitle {
+        font-size: 0.9rem;
+        margin-bottom: 18px;
+        line-height: 1.3;
+      }
+
+      .welcome-button {
+        padding: 10px 20px;
+        font-size: 0.9rem;
+        border-radius: 12px;
+        gap: 8px;
+
+        svg {
+          width: 16px;
+          height: 16px;
+        }
+      }
+    }
+
+    @media (max-width: 360px) {
+      .welcome-content {
+        padding: 16px 12px;
+        margin: 0 2px;
+        border-radius: 12px;
+      }
+
+      .welcome-icon {
+        margin-bottom: 14px;
+        
+        svg {
+          width: 36px;
+          height: 36px;
+        }
+      }
+
+      .welcome-title {
+        font-size: 1.3rem;
+        margin-bottom: 10px;
+      }
+
+      .welcome-subtitle {
+        font-size: 0.85rem;
+        margin-bottom: 16px;
+      }
+
+      .welcome-button {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+        gap: 6px;
+
+        svg {
+          width: 14px;
+          height: 14px;        }
+      }
+    }
+
+    /* Landscape mode optimizations for mobile */
+    @media (max-height: 500px) and (orientation: landscape) {
+      .welcome-screen {
+        padding: 0.75rem 0.5rem;
+        min-height: auto;
+      }
+
+      .welcome-content {
+        padding: 16px 20px;
+        max-width: 400px;
+      }
+
+      .welcome-icon {
+        margin-bottom: 12px;
+        
+        svg {
+          width: 32px;
+          height: 32px;
+        }
+      }
+
+      .welcome-title {
+        font-size: 1.4rem;
+        margin-bottom: 8px;
+      }
+
+      .welcome-subtitle {
+        font-size: 0.85rem;
+        margin-bottom: 16px;
+        line-height: 1.3;
+      }
+
+      .welcome-button {
+        padding: 8px 16px;
+        font-size: 0.85rem;
+      }
+    }
+
+    /* High density screens */
+    @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+      .welcome-content {
+        backdrop-filter: blur(20px);
+      }
+    }
+
+    /* Enhanced animations */
+    .welcome-content > * {
+      animation: slideInStagger 0.8s cubic-bezier(0.4, 0, 0.2, 1) both;
+    }
+
+    .welcome-icon {
+      animation-delay: 0.1s;
+    }
+
+    .welcome-title {
+      animation-delay: 0.2s;
+    }
+
+    .welcome-subtitle {
+      animation-delay: 0.3s;
+    }
+
+    .welcome-button {
+      animation-delay: 0.4s;
+    }
+
+    @keyframes slideInStagger {
+      from {
+        opacity: 0;
+        transform: translateY(30px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
       }
     }
   `]

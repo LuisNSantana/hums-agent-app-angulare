@@ -56,6 +56,7 @@ export interface PromptContext {
   conversationContext?: string;
   taskContext?: string;
   additionalInstructions?: string[];
+  userName?: string; // Added for user's name
 }
 
 export interface PromptExample {

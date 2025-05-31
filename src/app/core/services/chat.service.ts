@@ -18,6 +18,7 @@ import {
 } from '../../shared/models/chat.models';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { AuthStateService } from './auth'; // Import AuthStateService
 import { SystemPromptsService } from './prompts/system-prompts.service';
 
 @Injectable({
@@ -27,6 +28,7 @@ export class ChatService {
     // Inject Supabase service
   private readonly supabaseService = inject(SupabaseService);
   private readonly authService = inject(AuthService);
+  private readonly authStateService = inject(AuthStateService); // Inject AuthStateService
   private readonly systemPromptsService = inject(SystemPromptsService);
   
   // Reactive state with signals (Angular 20+)
@@ -105,8 +107,15 @@ export class ChatService {
       return conversationSettings.systemPrompt;
     }
 
-    // Use the active system prompt from SystemPromptsService
-    return this.systemPromptsService.generateSystemPrompt();
+    // Get user profile to extract name
+    const authUser = this.authStateService.getCurrentUser(); 
+    let userName: string | undefined = undefined;
+    if (authUser) {
+      userName = authUser.displayName || authUser.email?.split('@')[0];
+    }
+
+    // Use the active system prompt from SystemPromptsService, passing the user's name
+    return this.systemPromptsService.generateSystemPrompt({ userName: userName });
   }
 
   /**

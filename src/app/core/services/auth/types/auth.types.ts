@@ -11,7 +11,9 @@ export interface AuthUser {
   id: string;
   email: string;
   displayName?: string;
+  nickname?: string; // Added nickname
   avatarUrl?: string;
+  bio?: string; // Added bio
   emailConfirmed: boolean;
   lastSignIn?: Date;
   createdAt: Date;
@@ -20,8 +22,10 @@ export interface AuthUser {
 
 export interface UserPreferences {
   theme: 'light' | 'dark' | 'auto';
-  language: string;
+  language: string; // Already exists, can be used for preferredLanguage
   defaultModel?: string;
+  communicationStyle?: 'formal' | 'informal' | 'neutral'; // Added communicationStyle
+  interests?: string[]; // Added interests
   notifications: {
     email: boolean;
     browser: boolean;
