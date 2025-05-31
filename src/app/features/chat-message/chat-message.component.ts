@@ -52,6 +52,14 @@ import { ChatMessage } from '../../shared/models/chat.models';
           }
         </div>
 
+        <!-- Agent Thoughts (Moved Before Message Body) -->
+        @if (message().metadata?.thoughts && message().role === 'assistant') {
+          <details class="agent-thoughts">
+            <summary>🧠 Show Thinking</summary>
+            <div class="thought-text" [innerText]="message().metadata?.thoughts"></div>
+          </details>
+        }
+
         <!-- Message Body -->
         <div class="message-body">
           @if (message().isError) {
@@ -67,7 +75,9 @@ import { ChatMessage } from '../../shared/models/chat.models';
             <div class="message-text" [innerHTML]="formattedContent()"></div>
             
             @if (message().isStreaming) {
-              <div class="streaming-cursor" aria-label="AI is typing">▊</div>
+              <div class="streaming-indicator" aria-label="AI is thinking...">
+                <span class="dot"></span><span class="dot"></span><span class="dot"></span>
+              </div>
             }
           }
         </div>
@@ -279,6 +289,32 @@ import { ChatMessage } from '../../shared/models/chat.models';
       filter: drop-shadow(0 0 2px var(--primary));
     }
 
+    /* New Streaming Indicator Styles */
+    .streaming-indicator {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px; /* Spacing between dots */
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+
+    .streaming-indicator .dot {
+      width: 6px;
+      height: 6px;
+      background-color: var(--primary);
+      border-radius: 50%;
+      animation: pulse 1.4s infinite ease-in-out both;
+    }
+
+    .streaming-indicator .dot:nth-child(1) {
+      animation-delay: -0.32s;
+    }
+
+    .streaming-indicator .dot:nth-child(2) {
+      animation-delay: -0.16s;
+    }
+    /* End New Streaming Indicator Styles */
+
     .message-actions {
       display: flex;
       gap: 0.25rem;
@@ -323,6 +359,39 @@ import { ChatMessage } from '../../shared/models/chat.models';
       opacity: 0.7;
     }
 
+    /* Agent thoughts collapsible block */
+    .agent-thoughts {
+      margin-bottom: 0.5rem;
+      font-size: 0.875rem;
+      color: var(--muted-foreground);
+      align-self: flex-start; 
+      width: auto; /* Allow summary to dictate width */
+    }
+    .agent-thoughts summary {
+      cursor: pointer;
+      font-weight: 500;
+      padding: 0.25rem 0.5rem;
+      border-radius: 0.375rem;
+      background: var(--muted);
+      border: 1px solid var(--border);
+      display: inline-block; /* To allow padding and make it button-like */
+      transition: background-color 0.2s ease;
+    }
+    .agent-thoughts summary:hover {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .agent-thoughts[open] summary {
+      background: var(--accent);
+      color: var(--accent-foreground);
+    }
+    .agent-thoughts .thought-text {
+      padding: 0.5rem;
+      background: var(--muted);
+      border-radius: 0.5rem;
+      white-space: pre-wrap;
+    }
+
     @keyframes fadeInUp {
       from {
         opacity: 0;
@@ -337,6 +406,15 @@ import { ChatMessage } from '../../shared/models/chat.models';
     @keyframes blink {
       0%, 50% { opacity: 1; }
       51%, 100% { opacity: 0; }
+    }
+
+    /* New Pulse Animation for Dots */
+    @keyframes pulse {
+      0%, 80%, 100% {
+        transform: scale(0);
+      } 40% {
+        transform: scale(1.0);
+      }
     }
 
     @media (max-width: 768px) {

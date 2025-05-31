@@ -19,6 +19,7 @@ export interface ChatMessageMetadata {
   tokens?: number;
   processingTime?: number;
   sources?: string[];
+  thoughts?: string; // Internal agent reasoning (optional)
 }
 
 export interface Conversation {
@@ -32,9 +33,9 @@ export interface Conversation {
 }
 
 export interface ConversationSettings {
-  model: AIModel;
-  temperature: number;
-  maxTokens: number;
+  model?: AIModel;
+  temperature?: number;
+  maxTokens?: number;
   systemPrompt?: string;
 }
 

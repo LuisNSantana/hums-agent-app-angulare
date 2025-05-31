@@ -99,6 +99,7 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
           [availableModels]="availableModels()"
           [selectedModel]="selectedModel()"
           [placeholder]="getInputPlaceholder()"
+          [showSuggestions]="displaySuggestions()" 
           (messageSent)="onMessageSubmit($event)"
           (modelChanged)="onModelChanged($event)"
           (fileAttached)="onFileAttached($event)"
@@ -135,7 +136,10 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
 
     .chat-content {
       flex: 1;
-      overflow: hidden;
+      /* overflow: hidden; */ /* Cambiado para permitir el scroll del hijo */
+      overflow-y: auto; /* Permitir scroll vertical si el contenido excede */
+      display: flex; /* Para que app-chat-messages pueda crecer */
+      flex-direction: column; /* Para que app-chat-messages pueda crecer */
       position: relative;
     }
 
@@ -277,6 +281,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   // UI State
   readonly sidebarOpen = signal(true);
   readonly selectedModel = signal(''); // Inicialmente vacío
+  readonly displaySuggestions = signal(true); // Nuevo signal para controlar sugerencias
 
   // Chat State from service
   readonly conversations = this.chatService.conversations;
@@ -300,6 +305,13 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       if (models.length > 0 && (!this.selectedModel() || !models.some(m => m.id === this.selectedModel()))) {
         const local = models.find(m => m.provider === 'local' && m.isAvailable);
         this.selectedModel.set(local?.id || models[0].id);
+      }
+    });
+
+    // Ocultar sugerencias después del primer mensaje
+    effect(() => {
+      if (this.messages().length > 0 && this.displaySuggestions()) {
+        this.displaySuggestions.set(false);
       }
     });
   }

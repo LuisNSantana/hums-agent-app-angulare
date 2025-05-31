@@ -9,6 +9,7 @@ import { catchError, map, tap } from 'rxjs/operators';
 import { 
   ChatMessage, 
   Conversation, 
+  ConversationSettings,
   ChatRequest, 
   ChatResponse, 
   StreamChunk, 
@@ -17,15 +18,16 @@ import {
 } from '../../shared/models/chat.models';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
+import { SystemPromptsService } from './prompts/system-prompts.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ChatService {
-  
-  // Inject Supabase service
+    // Inject Supabase service
   private readonly supabaseService = inject(SupabaseService);
   private readonly authService = inject(AuthService);
+  private readonly systemPromptsService = inject(SystemPromptsService);
   
   // Reactive state with signals (Angular 20+)
   private readonly _conversations = signal<Conversation[]>([]);
@@ -93,25 +95,51 @@ export class ChatService {
     } finally {
       this._isProcessing.set(false);
     }
+  }  /**
+   * Get the system prompt for the AI agent
+   * Uses custom prompt from conversation settings or falls back to active system prompt
+   */
+  private getSystemPrompt(conversationSettings?: ConversationSettings): string {
+    // Return custom system prompt if provided
+    if (conversationSettings?.systemPrompt) {
+      return conversationSettings.systemPrompt;
+    }
+
+    // Use the active system prompt from SystemPromptsService
+    return this.systemPromptsService.generateSystemPrompt();
   }
+
   /**
    * Handles streaming chat response via Ollama API
    */
   private async streamChatResponse(request: ChatRequest, messageId: string): Promise<void> {
-    try {
+    try {      // Get current conversation for settings
+      const currentConversation = this._currentConversation();
+      
       // Build conversation history for Ollama
-      const messages = this._messages()
+      const messages: Array<{role: string, content: string}> = [];
+      
+      // Add system prompt as the first message
+      messages.push({
+        role: 'system',
+        content: this.getSystemPrompt(currentConversation?.settings)
+      });
+
+      // Add conversation history
+      const conversationMessages = this._messages()
         .filter(m => m.conversationId === request.conversationId && !m.isStreaming)
         .map(m => ({
           role: m.role === 'user' ? 'user' : 'assistant',
           content: m.content
         }));
+      
+      messages.push(...conversationMessages);
 
       // Add the current user message
       messages.push({
         role: 'user',
         content: request.message
-      });      const ollamaRequest = {
+      });const ollamaRequest = {
         model: request.model || 'deepseek-r1:7b',
         messages: messages,
         stream: true,
@@ -232,10 +260,31 @@ export class ChatService {
     
     if (messageIndex >= 0) {
       const message = currentMessages[messageIndex];
+      let finalContent = message.content;
+      let thoughts: string | undefined = undefined;
+
+      // Regular expression to find <think>...</think> tags and capture thoughts and the rest of the content
+      // This regex handles multi-line content within <think> tags
+      const thinkTagRegex = /<think>([\s\S]*?)<\/think>([\s\S]*)/;
+      const match = finalContent.match(thinkTagRegex);
+
+      if (match && match[1]) {
+        thoughts = match[1].trim();
+        finalContent = match[2] ? match[2].trim() : ''; // Content after </think> or empty if nothing follows
+      } else {
+        // If no <think> tags, the whole content is the message, and thoughts remain undefined
+        // This case is already handled by finalContent being initialized with message.content
+      }
+
       const updatedMessages = [...currentMessages];
       updatedMessages[messageIndex] = {
         ...message,
-        isStreaming: false
+        content: finalContent, // Use the parsed content (without thoughts block)
+        isStreaming: false,
+        metadata: {
+          ...message.metadata, // Preserve existing metadata
+          thoughts: thoughts,   // Add or overwrite thoughts
+        },
       };
       
       this._messages.set(updatedMessages);
@@ -244,15 +293,111 @@ export class ChatService {
       try {
         await this.supabaseService.createMessage(
           message.conversationId,
-          message.content,
+          finalContent, // Save parsed content (without thoughts block)
           message.role,
-          message.metadata
+          updatedMessages[messageIndex].metadata // Save updated metadata with thoughts
         );
       } catch (error) {
         console.error('Failed to save completed message to database:', error);
       }
     }
   }  /**
+   * Updates the system prompt for a conversation
+   */
+  async updateSystemPrompt(conversationId: string, systemPrompt: string): Promise<void> {
+    try {
+      const conversation = this._currentConversation();
+      if (!conversation || conversation.id !== conversationId) {
+        throw new ChatError('Conversation not found', 'NOT_FOUND');
+      }
+
+      const updatedSettings: ConversationSettings = {
+        ...conversation.settings,
+        systemPrompt: systemPrompt
+      };
+
+      const updatedConversation = {
+        ...conversation,
+        settings: updatedSettings
+      };
+
+      // Update in database - convert to JSON-compatible format
+      await this.supabaseService.updateConversation(conversationId, {
+        settings: JSON.parse(JSON.stringify(updatedSettings))
+      });
+
+      // Update local state
+      this._currentConversation.set(updatedConversation);
+
+      // Update conversations list
+      const conversations = this._conversations();
+      const conversationIndex = conversations.findIndex(c => c.id === conversationId);
+      if (conversationIndex >= 0) {
+        const updatedConversations = [...conversations];
+        updatedConversations[conversationIndex] = updatedConversation;
+        this._conversations.set(updatedConversations);
+      }
+
+    } catch (error) {
+      this.handleError(error as Error);
+    }
+  }
+
+  /**
+   * Gets the current system prompt for a conversation
+   */
+  getConversationSystemPrompt(conversationId?: string): string {
+    const conversation = conversationId 
+      ? this._conversations().find(c => c.id === conversationId)
+      : this._currentConversation();
+    
+    return this.getSystemPrompt(conversation?.settings);
+  }
+  /**
+   * Gets the default system prompt
+   */
+  getDefaultSystemPrompt(): string {
+    return this.systemPromptsService.getDefaultPrompt().template;
+  }
+
+  // System Prompts Management Methods
+  
+  /**
+   * Get all available prompt templates
+   */
+  getAvailablePrompts() {
+    return this.systemPromptsService.getPromptTemplates();
+  }
+
+  /**
+   * Get the currently active prompt
+   */
+  getActivePrompt() {
+    return this.systemPromptsService.getActivePrompt();
+  }
+
+  /**
+   * Set the active prompt template
+   */
+  setActivePrompt(promptId: string): void {
+    this.systemPromptsService.setActivePrompt(promptId);
+  }
+
+  /**
+   * Get prompts by category
+   */
+  getPromptsByCategory(category: string) {
+    return this.systemPromptsService.getPromptsByCategory(category as any);
+  }
+
+  /**
+   * Get available prompt categories
+   */
+  getPromptCategories() {
+    return this.systemPromptsService.getAvailableCategories();
+  }
+
+  /**
    * Creates a new conversation
    */
   async createConversation(title?: string, firstMessage?: string): Promise<Conversation> {
