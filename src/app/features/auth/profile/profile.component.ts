@@ -92,10 +92,9 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                 <mat-card-content>
                   <form [formGroup]="profileForm" (ngSubmit)="updateProfile()" class="profile-form">
                     <h3 class="mat-headline-6 form-title">Personal Information</h3>
-                    
-                    <mat-form-field appearance="outline">
+                      <mat-form-field appearance="outline">
                       <mat-label>Display Name</mat-label>
-                      <input matInput formControlName="displayName" placeholder="Your public name" required>
+                      <input matInput formControlName="displayName" required>
                       <mat-error *ngIf="profileForm.get('displayName')?.hasError('required')">
                         Display name is required
                       </mat-error>
@@ -106,13 +105,13 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
 
                     <mat-form-field appearance="outline">
                       <mat-label>Nickname (Optional)</mat-label>
-                      <input matInput formControlName="nickname" placeholder="A friendly name for the agent to use">
+                      <input matInput formControlName="nickname">
                       <mat-hint>A friendly name for the agent to use</mat-hint>
                     </mat-form-field>
 
                     <mat-form-field appearance="outline">
                       <mat-label>Bio (Optional)</mat-label>
-                      <textarea matInput formControlName="bio" placeholder="Tell us a bit about yourself..." rows="3" matTextareaAutosize></textarea>
+                      <textarea matInput formControlName="bio" rows="3" matTextareaAutosize></textarea>
                       <mat-hint>{{ profileForm.get('bio')?.value?.length || 0 }}/250 characters</mat-hint>
                       <mat-error *ngIf="profileForm.get('bio')?.hasError('maxlength')">
                         Bio cannot exceed 250 characters
@@ -156,11 +155,9 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                         <mat-option value="formal">Formal</mat-option>
                         <mat-option value="informal">Informal</mat-option>
                       </mat-select>
-                    </mat-form-field>
-
-                    <mat-form-field appearance="outline">
+                    </mat-form-field>                    <mat-form-field appearance="outline">
                       <mat-label>Interests (Optional)</mat-label>
-                      <input matInput formControlName="interests" placeholder="e.g., technology, hiking, art">
+                      <input matInput formControlName="interests">
                       <mat-hint>Comma-separated interests to help the agent personalize suggestions</mat-hint>
                     </mat-form-field>
 
@@ -206,18 +203,15 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                     </mat-card>
 
                     <!-- Password Change Form -->
-                    <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="profile-form">
-                      <mat-form-field appearance="outline">
+                    <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="profile-form">                      <mat-form-field appearance="outline">
                         <mat-label>Current Password</mat-label>
-                        <input matInput type="password" formControlName="currentPassword" placeholder="Enter current password" required>
+                        <input matInput type="password" formControlName="currentPassword" required>
                         <mat-error *ngIf="passwordForm.get('currentPassword')?.hasError('required')">
                           Current password is required
                         </mat-error>
-                      </mat-form-field>
-
-                      <mat-form-field appearance="outline">
+                      </mat-form-field>                      <mat-form-field appearance="outline">
                         <mat-label>New Password</mat-label>
-                        <input matInput type="password" formControlName="newPassword" placeholder="Enter new password" required>
+                        <input matInput type="password" formControlName="newPassword" required>
                         <mat-hint>Minimum 8 characters</mat-hint>
                         <mat-error *ngIf="passwordForm.get('newPassword')?.hasError('required')">
                           New password is required
@@ -225,11 +219,9 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                         <mat-error *ngIf="passwordForm.get('newPassword')?.hasError('minlength')">
                           Password must be at least 8 characters long
                         </mat-error>
-                      </mat-form-field>
-
-                      <mat-form-field appearance="outline">
+                      </mat-form-field>                      <mat-form-field appearance="outline">
                         <mat-label>Confirm New Password</mat-label>
-                        <input matInput type="password" formControlName="confirmNewPassword" placeholder="Confirm new password" required>
+                        <input matInput type="password" formControlName="confirmNewPassword" required>
                         <mat-error *ngIf="passwordForm.get('confirmNewPassword')?.hasError('required')">
                           Please confirm your new password
                         </mat-error>
@@ -377,9 +369,7 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
       position: relative;
       z-index: 2;
       box-shadow: 0 2px 8px rgba(99, 102, 241, 0.4);
-    }
-
-    .message-container {
+    }    .message-container {
       display: flex;
       align-items: center;
       gap: 12px;
@@ -389,18 +379,39 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
       font-size: 14px;
       box-shadow: var(--mat-app-shadow);
       backdrop-filter: blur(10px);
+      border: 1px solid transparent;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    .message-container::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+      transition: left 0.5s ease;
+    }
+
+    .message-container:hover::before {
+      left: 100%;
     }
 
     .message-container.success {
-      background: rgba(76, 175, 80, 0.15);
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.15) 0%, rgba(129, 199, 132, 0.1) 100%);
       color: var(--mat-app-success);
-      border: 1px solid rgba(76, 175, 80, 0.3);
+      border-color: rgba(76, 175, 80, 0.3);
+      box-shadow: 0 4px 16px rgba(76, 175, 80, 0.2);
     }
 
     .message-container.error {
-      background: rgba(207, 102, 121, 0.15);
+      background: linear-gradient(135deg, rgba(207, 102, 121, 0.15) 0%, rgba(239, 154, 154, 0.1) 100%);
       color: var(--mat-app-error);
-      border: 1px solid rgba(207, 102, 121, 0.3);
+      border-color: rgba(207, 102, 121, 0.3);
+      box-shadow: 0 4px 16px rgba(207, 102, 121, 0.2);
     }
 
     .profile-grid {
@@ -415,42 +426,68 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
         grid-template-columns: 1fr;
         gap: 24px;
       }
-    }
-
-    .profile-sidebar {
+    }    .profile-sidebar {
       position: sticky;
       top: 24px;
-      background: var(--mat-app-surface) !important;
+      background: var(--mat-app-surface-container) !important;
       border-radius: 16px !important;
       box-shadow: var(--mat-app-shadow-elevated) !important;
-      border: 1px solid rgba(99, 102, 241, 0.1) !important;
+      border: 1px solid var(--mat-app-outline-variant) !important;
       overflow: hidden;
+      backdrop-filter: blur(20px);
+      transition: all 0.3s ease;
+    }
+
+    .profile-sidebar:hover {
+      border-color: var(--mat-app-outline) !important;
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15) !important;
     }
 
     .profile-user-info {
       text-align: center;
       padding: 8px 0;
-    }
-
-    .avatar-container {
+    }    .avatar-container {
       position: relative;
       display: inline-block;
       margin-bottom: 20px;
     }
 
-    .avatar-image {
+    .avatar-wrapper {
+      position: relative;
       width: 120px;
       height: 120px;
+      margin: 0 auto;
       border-radius: 50%;
-      object-fit: cover;
-      border: 4px solid var(--mat-app-primary);
+      background: linear-gradient(135deg, var(--mat-app-primary) 0%, var(--mat-app-secondary) 100%);
+      padding: 4px;
       box-shadow: 0 8px 24px rgba(99, 102, 241, 0.3);
-      transition: transform 0.3s ease, box-shadow 0.3s ease;
+      transition: all 0.3s ease;
     }
 
-    .avatar-image:hover {
+    .avatar-wrapper:hover {
       transform: scale(1.05);
       box-shadow: 0 12px 32px rgba(99, 102, 241, 0.4);
+    }
+
+    .default-avatar-icon {
+      width: 112px !important;
+      height: 112px !important;
+      font-size: 112px !important;
+      border-radius: 50%;
+      background: var(--mat-app-surface-container-high);
+      color: var(--mat-app-on-surface-variant);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .avatar-image {
+      width: 112px;
+      height: 112px;
+      border-radius: 50%;
+      object-fit: cover;
+      background: var(--mat-app-surface-container-high);
+      transition: transform 0.3s ease;
     }
 
     .avatar-edit-button {
@@ -458,23 +495,37 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
       bottom: 0;
       right: 0;
       background: var(--mat-app-primary) !important;
-      color: white !important;
-      box-shadow: var(--mat-app-shadow) !important;
+      color: var(--mat-app-on-primary) !important;
+      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4) !important;
+      border: 3px solid var(--mat-app-surface-container) !important;
+      transition: all 0.3s ease;
+    }
+
+    .avatar-edit-button:hover {
+      background: var(--mat-app-primary-container) !important;
+      color: var(--mat-app-on-primary-container) !important;
+      transform: scale(1.1);
+      box-shadow: 0 6px 16px rgba(99, 102, 241, 0.5) !important;
     }
 
     .user-email {
       color: var(--mat-app-on-surface-variant);
       margin-bottom: 20px;
       font-size: 14px;
-    }
-
-    .profile-main {
+    }    .profile-main {
       min-height: 600px;
-      background: var(--mat-app-surface) !important;
+      background: var(--mat-app-surface-container) !important;
       border-radius: 16px !important;
       box-shadow: var(--mat-app-shadow-elevated) !important;
-      border: 1px solid rgba(99, 102, 241, 0.1) !important;
+      border: 1px solid var(--mat-app-outline-variant) !important;
       overflow: hidden;
+      backdrop-filter: blur(20px);
+      transition: all 0.3s ease;
+    }
+
+    .profile-main:hover {
+      border-color: var(--mat-app-outline) !important;
+      box-shadow: 0 8px 32px rgba(99, 102, 241, 0.15) !important;
     }
 
     .profile-form {
@@ -522,23 +573,51 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
 
     .security-content {
       padding: 32px 24px;
-    }
-
-    .verification-card {
+    }    .verification-card {
       margin: 24px 0;
       border-radius: 12px !important;
       border: none !important;
       box-shadow: var(--mat-app-shadow) !important;
+      transition: all 0.3s ease;
+    }
+
+    .verification-card:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--mat-app-shadow-elevated) !important;
     }
 
     .verification-card.verified {
-      background: rgba(76, 175, 80, 0.1) !important;
-      border: 1px solid rgba(76, 175, 80, 0.2) !important;
+      background: var(--mat-app-surface-container) !important;
+      border: 1px solid rgba(76, 175, 80, 0.3) !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .verification-card.verified::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(135deg, #4caf50 0%, #81c784 100%);
     }
 
     .verification-card.pending {
-      background: rgba(255, 152, 0, 0.1) !important;
-      border: 1px solid rgba(255, 152, 0, 0.2) !important;
+      background: var(--mat-app-surface-container) !important;
+      border: 1px solid rgba(255, 152, 0, 0.3) !important;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .verification-card.pending::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(135deg, #ff9800 0%, #ffb74d 100%);
     }
 
     .verification-header {
@@ -564,113 +643,296 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
       font-size: 12px;
       color: var(--mat-app-on-surface-variant);
       padding: 8px 16px;
-      background: var(--mat-app-surface-variant);
+      background: var(--mat-app-surface-container-low);
+      border: 1px solid var(--mat-app-outline-variant);
       border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      overflow: hidden;
     }
 
-    /* Material Form Field Customizations */
+    .resending-text::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.1), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% { left: -100%; }
+      100% { left: 100%; }
+    }    /* Material Form Field Customizations - Enhanced for Dark Theme */
     ::ng-deep .mat-mdc-form-field {
       width: 100%;
     }
 
+    /* Background and surface colors */
+    ::ng-deep .mat-mdc-text-field-wrapper {
+      background-color: var(--mat-app-surface-container-low);
+      border-radius: 12px;
+    }
+
+    /* Input text color */
+    ::ng-deep .mat-mdc-form-field input {
+      color: var(--mat-app-on-surface) !important;
+      caret-color: var(--mat-app-primary);
+    }
+
+    ::ng-deep .mat-mdc-form-field textarea {
+      color: var(--mat-app-on-surface) !important;
+      caret-color: var(--mat-app-primary);
+    }
+
+    /* Placeholder text - Critical fix for dark theme */
+    ::ng-deep .mat-mdc-form-field input::placeholder {
+      color: var(--mat-app-on-surface-variant) !important;
+      opacity: 0.7;
+    }
+
+    ::ng-deep .mat-mdc-form-field textarea::placeholder {
+      color: var(--mat-app-on-surface-variant) !important;
+      opacity: 0.7;
+    }
+
+    /* Label colors */
+    ::ng-deep .mat-mdc-form-field .mat-mdc-floating-label {
+      color: var(--mat-app-on-surface-variant) !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field.mat-focused .mat-mdc-floating-label {
+      color: var(--mat-app-primary) !important;
+    }
+
+    /* Hint text */
+    ::ng-deep .mat-mdc-form-field .mat-mdc-form-field-hint {
+      color: var(--mat-app-on-surface-variant) !important;
+    }
+
+    /* Outline colors */
+    ::ng-deep .mat-mdc-form-field .mdc-notched-outline__leading,
+    ::ng-deep .mat-mdc-form-field .mdc-notched-outline__notch,
+    ::ng-deep .mat-mdc-form-field .mdc-notched-outline__trailing {
+      border-color: var(--mat-app-outline-variant) !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field:hover .mdc-notched-outline__leading,
+    ::ng-deep .mat-mdc-form-field:hover .mdc-notched-outline__notch,
+    ::ng-deep .mat-mdc-form-field:hover .mdc-notched-outline__trailing {
+      border-color: var(--mat-app-outline) !important;
+    }
+
+    ::ng-deep .mat-mdc-form-field.mat-focused .mdc-notched-outline__leading,
+    ::ng-deep .mat-mdc-form-field.mat-focused .mdc-notched-outline__notch,
+    ::ng-deep .mat-mdc-form-field.mat-focused .mdc-notched-outline__trailing {
+      border-color: var(--mat-app-primary) !important;
+      border-width: 2px !important;
+    }
+
+    /* Select fields */
+    ::ng-deep .mat-mdc-select-value {
+      color: var(--mat-app-on-surface) !important;
+    }
+
+    ::ng-deep .mat-mdc-select-placeholder {
+      color: var(--mat-app-on-surface-variant) !important;
+      opacity: 0.7;
+    }
+
+    /* Focus overlay */
     ::ng-deep .mat-mdc-form-field .mat-mdc-form-field-focus-overlay {
       background-color: var(--mat-app-primary);
-    }
-
-    ::ng-deep .mat-mdc-form-field.mat-focused .mat-mdc-form-field-label {
-      color: var(--mat-app-primary);
-    }
-
-    ::ng-deep .mat-mdc-form-field .mdc-outlined-text-field--focused .mdc-notched-outline__leading,
-    ::ng-deep .mat-mdc-form-field .mdc-outlined-text-field--focused .mdc-notched-outline__notch,
-    ::ng-deep .mat-mdc-form-field .mdc-outlined-text-field--focused .mdc-notched-outline__trailing {
-      border-color: var(--mat-app-primary);
-    }
-
+      opacity: 0.04;
+    }    /* Enhanced Card Styling for Dark Theme */
     ::ng-deep .mat-mdc-card {
-      background: var(--mat-app-surface);
-      color: var(--mat-app-on-surface);
+      background: var(--mat-app-surface-container) !important;
+      color: var(--mat-app-on-surface) !important;
+      border: 1px solid var(--mat-app-outline-variant) !important;
+      transition: all 0.3s ease;
     }
 
+    ::ng-deep .mat-mdc-card:hover {
+      background: var(--mat-app-surface-container-high) !important;
+      border-color: var(--mat-app-outline) !important;
+      box-shadow: var(--mat-app-shadow-elevated) !important;
+    }
+
+    ::ng-deep .mat-mdc-card-content {
+      color: var(--mat-app-on-surface) !important;
+    }
+
+    /* Card actions styling */
     mat-card-actions {
       display: flex;
       gap: 12px;
       flex-wrap: wrap;
       padding: 16px 24px !important;
-      background: var(--mat-app-surface-variant);
+      background: var(--mat-app-surface-container-low) !important;
+      border-top: 1px solid var(--mat-app-outline-variant) !important;
       margin: 0 -24px -24px -24px;
-    }
-
-    mat-chip-set {
+    }    mat-chip-set {
       justify-content: center;
       margin-top: 8px;
     }
 
+    /* Enhanced Chip Styling for Dark Theme */
     ::ng-deep .mat-mdc-chip {
       border-radius: 16px;
       font-weight: 500;
+      border: 1px solid var(--mat-app-outline-variant);
+      transition: all 0.3s ease;
+    }
+
+    ::ng-deep .mat-mdc-chip:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--mat-app-shadow);
     }
 
     ::ng-deep .mat-mdc-chip.mat-accent {
-      background-color: rgba(76, 175, 80, 0.2);
-      color: var(--mat-app-success);
+      background: linear-gradient(135deg, rgba(76, 175, 80, 0.2) 0%, rgba(129, 199, 132, 0.15) 100%) !important;
+      color: var(--mat-app-success) !important;
+      border-color: rgba(76, 175, 80, 0.4) !important;
     }
 
     ::ng-deep .mat-mdc-chip.mat-warn {
-      background-color: rgba(255, 152, 0, 0.2);
-      color: var(--mat-app-warning);
+      background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(255, 183, 77, 0.15) 100%) !important;
+      color: var(--mat-app-warning) !important;
+      border-color: rgba(255, 152, 0, 0.4) !important;
     }
 
-    /* Tab styling */
+    ::ng-deep .mat-mdc-chip .mat-icon {
+      color: inherit;
+    }/* Enhanced Tab Styling for Dark Theme */
     ::ng-deep .mat-mdc-tab-group {
       background: transparent;
     }
 
     ::ng-deep .mat-mdc-tab-header {
-      border-bottom: 1px solid rgba(99, 102, 241, 0.1);
-      background: var(--mat-app-surface-variant);
+      border-bottom: 1px solid var(--mat-app-outline-variant) !important;
+      background: var(--mat-app-surface-container-low) !important;
       margin: 0 -24px 0 -24px;
       padding: 0 24px;
     }
 
     ::ng-deep .mat-mdc-tab {
-      color: var(--mat-app-on-surface-variant);
+      color: var(--mat-app-on-surface-variant) !important;
       font-weight: 500;
       text-transform: none;
+      transition: all 0.3s ease;
+    }
+
+    ::ng-deep .mat-mdc-tab:hover {
+      color: var(--mat-app-on-surface) !important;
+      background: var(--mat-app-surface-container) !important;
     }
 
     ::ng-deep .mat-mdc-tab.mdc-tab--active {
-      color: var(--mat-app-primary);
+      color: var(--mat-app-primary) !important;
+      background: var(--mat-app-surface-container) !important;
+    }
+
+    ::ng-deep .mat-mdc-tab .mdc-tab__text-label {
+      color: inherit !important;
     }
 
     ::ng-deep .mat-mdc-tab-indicator .mdc-tab-indicator__content--underline {
-      background-color: var(--mat-app-primary);
+      background-color: var(--mat-app-primary) !important;
       height: 3px;
       border-radius: 2px 2px 0 0;
     }
 
-    /* Button styling */
+    /* Tab body */
+    ::ng-deep .mat-mdc-tab-body-wrapper {
+      background: var(--mat-app-surface-container);
+    }    /* Enhanced Button Styling for Dark Theme */
     ::ng-deep .mat-mdc-raised-button.mat-primary {
-      background-color: var(--mat-app-primary);
-      color: var(--mat-app-on-primary);
+      background-color: var(--mat-app-primary) !important;
+      color: var(--mat-app-on-primary) !important;
+      border: none !important;
+      box-shadow: var(--mat-app-shadow) !important;
+      transition: all 0.3s ease;
+    }
+
+    ::ng-deep .mat-mdc-raised-button.mat-primary:hover {
+      background-color: var(--mat-app-primary-container) !important;
+      color: var(--mat-app-on-primary-container) !important;
+      box-shadow: var(--mat-app-shadow-elevated) !important;
+      transform: translateY(-2px);
     }
 
     ::ng-deep .mat-mdc-raised-button.mat-accent {
-      background-color: var(--mat-app-secondary);
-      color: var(--mat-app-on-secondary);
+      background-color: var(--mat-app-secondary) !important;
+      color: var(--mat-app-on-secondary) !important;
+      border: none !important;
+      box-shadow: var(--mat-app-shadow) !important;
+      transition: all 0.3s ease;
     }
 
+    ::ng-deep .mat-mdc-raised-button.mat-accent:hover {
+      background-color: var(--mat-app-secondary-container) !important;
+      color: var(--mat-app-on-secondary-container) !important;
+      box-shadow: var(--mat-app-shadow-elevated) !important;
+      transform: translateY(-2px);
+    }
+
+    /* Enhanced Sign Out Button Styling */
     ::ng-deep .mat-mdc-raised-button.mat-warn {
-      background-color: var(--mat-app-error);
-      color: var(--mat-app-on-error);
+      background: linear-gradient(135deg, var(--mat-app-error) 0%, #d32f2f 100%) !important;
+      color: var(--mat-app-on-error) !important;
+      border: none !important;
+      box-shadow: 0 4px 12px rgba(211, 47, 47, 0.3) !important;
+      transition: all 0.3s ease;
+      font-weight: 600;
+      position: relative;
+      overflow: hidden;
     }
 
+    ::ng-deep .mat-mdc-raised-button.mat-warn::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      transition: left 0.5s ease;
+    }
+
+    ::ng-deep .mat-mdc-raised-button.mat-warn:hover {
+      background: linear-gradient(135deg, #d32f2f 0%, #b71c1c 100%) !important;
+      box-shadow: 0 6px 20px rgba(211, 47, 47, 0.4) !important;
+      transform: translateY(-2px);
+    }
+
+    ::ng-deep .mat-mdc-raised-button.mat-warn:hover::before {
+      left: 100%;
+    }
+
+    ::ng-deep .mat-mdc-raised-button.mat-warn:active {
+      transform: translateY(0px);
+      box-shadow: 0 2px 8px rgba(211, 47, 47, 0.3) !important;
+    }
+
+    /* Stroked button styling */
     ::ng-deep .mat-mdc-outlined-button {
-      border-color: var(--mat-app-primary);
-      color: var(--mat-app-primary);
+      border-color: var(--mat-app-outline) !important;
+      color: var(--mat-app-primary) !important;
+      background: var(--mat-app-surface-container-low) !important;
+      transition: all 0.3s ease;
     }
 
-    /* Responsive adjustments */
+    ::ng-deep .mat-mdc-outlined-button:hover {
+      border-color: var(--mat-app-primary) !important;
+      background: var(--mat-app-primary-container) !important;
+      color: var(--mat-app-on-primary-container) !important;
+      transform: translateY(-1px);
+      box-shadow: var(--mat-app-shadow) !important;
+    }    /* Enhanced Responsive Design and Accessibility */
     @media (max-width: 768px) {
       .profile-container {
         padding: 16px;
@@ -693,12 +955,32 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
         align-items: stretch;
         gap: 12px;
       }
+
+      .profile-grid {
+        gap: 16px;
+      }
+
+      .profile-sidebar,
+      .profile-main {
+        border-radius: 12px !important;
+      }
     }
 
     @media (max-width: 600px) {
-      .avatar-image {
+      .avatar-wrapper {
         width: 100px;
         height: 100px;
+      }
+
+      .default-avatar-icon {
+        width: 92px !important;
+        height: 92px !important;
+        font-size: 92px !important;
+      }
+
+      .avatar-image {
+        width: 92px;
+        height: 92px;
       }
       
       mat-card-actions {
@@ -714,6 +996,80 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
         width: 36px;
         height: 36px;
       }
+
+      .profile-header h1 {
+        font-size: 2rem;
+      }
+
+      .header-content {
+        padding: 20px 12px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .profile-container {
+        padding: 12px;
+      }
+
+      .profile-form {
+        padding: 16px 12px;
+        gap: 16px;
+      }
+
+      .submit-button {
+        width: 100%;
+        min-width: unset;
+      }
+
+      .message-container {
+        padding: 12px 16px;
+        font-size: 13px;
+      }
+
+      .form-title {
+        font-size: 1.1rem;
+      }
+    }
+
+    /* High Contrast Mode Support */
+    @media (prefers-contrast: high) {
+      .profile-sidebar,
+      .profile-main {
+        border-width: 2px !important;
+      }
+
+      .avatar-wrapper {
+        padding: 6px;
+      }
+
+      .message-container {
+        border-width: 2px;
+      }
+
+      .verification-card {
+        border-width: 2px !important;
+      }
+    }
+
+    /* Reduced Motion Support */
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+
+      .header-content::after {
+        animation: none;
+      }
+
+      .large-icon {
+        animation: none;
+      }
+
+      .submit-button mat-icon {
+        animation: none;
+      }
     }
 
     /* Global snackbar styles */
@@ -727,23 +1083,58 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
       color: white !important;
     }
 
-    /* Loading animation enhancement */
+    /* Enhanced Select Dropdown Styling */
+    ::ng-deep .mat-mdc-select-panel {
+      background: var(--mat-app-surface-container) !important;
+      border: 1px solid var(--mat-app-outline-variant) !important;
+      border-radius: 12px !important;
+      box-shadow: var(--mat-app-shadow-elevated) !important;
+      backdrop-filter: blur(20px);
+    }
+
+    ::ng-deep .mat-mdc-option {
+      color: var(--mat-app-on-surface) !important;
+      transition: all 0.3s ease;
+    }
+
+    ::ng-deep .mat-mdc-option:hover {
+      background: var(--mat-app-surface-container-high) !important;
+      color: var(--mat-app-on-surface) !important;
+    }
+
+    ::ng-deep .mat-mdc-option.mdc-list-item--selected {
+      background: var(--mat-app-primary-container) !important;
+      color: var(--mat-app-on-primary-container) !important;
+    }
+
+    /* Enhanced Error Styling */
+    ::ng-deep .mat-mdc-form-field-error {
+      color: var(--mat-app-error) !important;
+      font-size: 12px;
+      margin-top: 4px;
+    }
+
+    ::ng-deep .mat-mdc-form-field.mat-form-field-invalid .mdc-notched-outline__leading,
+    ::ng-deep .mat-mdc-form-field.mat-form-field-invalid .mdc-notched-outline__notch,
+    ::ng-deep .mat-mdc-form-field.mat-form-field-invalid .mdc-notched-outline__trailing {
+      border-color: var(--mat-app-error) !important;
+    }
+
+    /* Enhanced focus for inputs */
+    ::ng-deep .mat-mdc-form-field input:focus,
+    ::ng-deep .mat-mdc-form-field textarea:focus {
+      outline: none;
+    }
+
+    /* Enhanced loading state */
     .submit-button:disabled {
       opacity: 0.7;
       cursor: not-allowed;
+      pointer-events: none;
     }
 
-    /* Hover effects */
-    .profile-sidebar:hover,
-    .profile-main:hover {
-      transform: translateY(-2px);
-      transition: transform 0.3s ease;
-    }
-
-    /* Focus enhancements */
-    button:focus-visible {
-      outline: 2px solid var(--mat-app-primary);
-      outline-offset: 2px;
+    .submit-button:disabled mat-icon {
+      animation: spin 1s linear infinite;
     }
   `]
 })
