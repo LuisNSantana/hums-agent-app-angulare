@@ -20,6 +20,17 @@ export interface ChatMessageMetadata {
   processingTime?: number;
   sources?: string[];
   thoughts?: string; // Internal agent reasoning (optional)
+  attachments?: ChatAttachment[]; // File/image attachments
+}
+
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'document';
+  size: number;
+  url?: string; // For displaying the attachment
+  base64?: string; // For sending to AI models
+  mimeType: string;
 }
 
 export interface Conversation {
@@ -54,6 +65,7 @@ export interface ChatRequest {
   conversationId: string;
   model: string;
   settings?: Partial<ConversationSettings>;
+  attachments?: ChatAttachment[]; // Support for multimodal inputs
 }
 
 export interface ChatResponse {

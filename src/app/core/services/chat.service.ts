@@ -86,14 +86,16 @@ export class ChatService {
       console.log('[ChatService] Enviando mensaje:', request);
       console.log('[ChatService] Model recibido:', request.model);
       console.log('[ChatService] Tipo del model:', typeof request.model);
-      
-      // Add user message immediately
+        // Add user message immediately (including attachments in metadata)
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
         content: request.message,
         role: 'user',
         timestamp: new Date(),
-        conversationId: request.conversationId
+        conversationId: request.conversationId,
+        metadata: request.attachments && request.attachments.length > 0 ? {
+          attachments: request.attachments
+        } : undefined
       };
       
       await this.addMessage(userMessage);
@@ -165,20 +167,34 @@ export class ChatService {
           content: m.content
         }));
       
-      messages.push(...conversationMessages);
-
-      // Add the current user message
-      messages.push({
+      messages.push(...conversationMessages);      // Add the current user message (with potential image attachments)
+      const userMessage: any = {
         role: 'user',
         content: request.message
-      });const ollamaRequest = {
+      };
+
+      // Add images for multimodal support if available
+      if (request.attachments && request.attachments.length > 0) {
+        // Filter for image attachments only
+        const imageAttachments = request.attachments.filter(att => att.type === 'image');
+        
+        if (imageAttachments.length > 0) {
+          userMessage.images = imageAttachments
+            .map(att => att.base64)
+            .filter(base64 => base64); // Remove any null/undefined base64 values
+          
+          console.log('[ChatService] Adding', imageAttachments.length, 'image(s) to multimodal request');
+        }
+      }
+
+      messages.push(userMessage);      const ollamaRequest = {
         model: request.model || 'deepseek-r1:7b',
         messages: messages,
         stream: true,
         options: {
           temperature: 0.7,
           top_p: 0.9,
-          max_tokens: 2048
+          max_tokens: 4096
         }
       };
 

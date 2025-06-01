@@ -71,9 +71,7 @@ import { AuthService } from '../../core/services/auth/auth.service';
             <summary>🧠 Show Thinking</summary>
             <div class="thought-text" [innerText]="message().metadata?.thoughts"></div>
           </details>
-        }
-
-        <!-- Message Body -->
+        }        <!-- Message Body -->
         <div class="message-body">
           @if (message().isError) {
             <div class="error-content">
@@ -85,6 +83,22 @@ import { AuthService } from '../../core/services/auth/auth.service';
               {{ message().content }}
             </div>
           } @else {
+            <!-- Attached Images (for user messages) -->
+            <div class="message-attachments" *ngIf="attachments().length > 0">
+              <div class="attachment-image"
+                   *ngFor="let attachment of attachments(); trackBy: trackByAttachment">
+                <img *ngIf="attachment.type === 'image' && attachment.url"
+                     [src]="attachment.url"
+                     [alt]="attachment.name"
+                     class="attached-image"
+                     loading="lazy" />
+                <div class="attachment-info">
+                  <span class="attachment-name">{{ attachment.name }}</span>
+                  <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                </div>
+              </div>
+            </div>
+
             <div class="message-text" [innerHTML]="formattedContent()"></div>
             
             @if (message().isStreaming) {
@@ -180,7 +194,7 @@ import { AuthService } from '../../core/services/auth/auth.service';
         0 4px 20px rgba(99, 102, 241, 0.4),
         inset 0 1px 0 rgba(255, 255, 255, 0.2);
     }.message.assistant .message-body {
-      background: var(--mat-app-surface-container-high);
+      background: var(--mat-app-surface-container);
       border: 1px solid var(--mat-app-border-variant);
       border-radius: 20px;
       border-bottom-left-radius: 6px;
@@ -473,6 +487,101 @@ import { AuthService } from '../../core/services/auth/auth.service';
       box-shadow: var(--mat-app-shadow-sm);
     }
 
+    /* Multimodal Image Attachment Styles */
+    .message-attachments {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-bottom: 16px;
+      width: 100%;
+    }
+
+    .attachment-image {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      background: var(--mat-app-surface-container);
+      border: 1px solid var(--mat-app-border);
+      border-radius: 12px;
+      padding: 12px;
+      transition: all 0.3s ease;
+      max-width: 300px;
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .attachment-image:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--mat-app-shadow-md);
+      border-color: var(--mat-app-primary);
+    }
+
+    .attached-image {
+      width: 100%;
+      max-width: 280px;
+      height: auto;
+      max-height: 200px;
+      object-fit: cover;
+      border-radius: 8px;
+      border: 1px solid var(--mat-app-border-variant);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .attached-image:hover {
+      transform: scale(1.02);
+      box-shadow: var(--mat-app-shadow);
+    }
+
+    .attachment-info {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .attachment-name {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--mat-app-on-surface);
+      word-break: break-word;
+    }
+
+    .attachment-size {
+      font-size: 11px;
+      color: var(--mat-app-on-surface-variant);
+      opacity: 0.8;
+    }
+
+    /* Responsive design for attachments */
+    @media (max-width: 768px) {
+      .attachment-image {
+        max-width: 250px;
+      }
+
+      .attached-image {
+        max-width: 230px;
+        max-height: 150px;
+      }
+    }
+
+    @media (max-width: 480px) {
+      .attachment-image {
+        max-width: 200px;
+      }
+
+      .attached-image {
+        max-width: 180px;
+        max-height: 120px;
+      }
+
+      .attachment-name {
+        font-size: 12px;
+      }
+
+      .attachment-size {
+        font-size: 10px;
+      }
+    }
+
     @keyframes slideInUp {
       from {
         opacity: 0;
@@ -604,6 +713,9 @@ export class ChatMessageComponent {
       .replace(/\n/g, '<br>');
   });
 
+  // Add computed attachments signal to safely handle optional metadata
+  readonly attachments = computed(() => this.message().metadata?.attachments ?? []);
+
   formatTime(timestamp: Date): string {
     const now = new Date();
     const diff = now.getTime() - timestamp.getTime();
@@ -647,5 +759,22 @@ export class ChatMessageComponent {
     if (userElement) {
       userElement.classList.add('avatar-error');
     }
+  }
+
+  /**
+   * Format file size in human-readable format
+   */
+  formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  trackByAttachment(index: number, attachment: any): string {
+    return attachment.id;
   }
 }

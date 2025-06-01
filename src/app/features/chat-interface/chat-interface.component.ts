@@ -17,7 +17,7 @@ import { CommonModule } from '@angular/common';
 import { Subject, takeUntil } from 'rxjs';
 
 import { ChatService } from '../../core/services/chat.service';
-import { ChatMessage, Conversation } from '../../shared/models/chat.models';
+import { ChatMessage, Conversation, ChatAttachment } from '../../shared/models/chat.models';
 import { ChatSidebarComponent } from '../chat-sidebar/chat-sidebar.component';
 import { ChatMessagesComponent } from '../chat-messages/chat-messages.component';
 import { ChatInputComponent } from '../chat-input/chat-input.component';
@@ -92,8 +92,7 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
               </div>
             </div>
           }
-        </div>        <!-- Input Area -->
-        <app-chat-input
+        </div>        <!-- Input Area -->        <app-chat-input
           [disabled]="isProcessing()"
           [showModelSelector]="true"
           [availableModels]="availableModels()"
@@ -103,6 +102,7 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
           (messageSent)="onMessageSubmit($event)"
           (modelChanged)="onModelChanged($event)"
           (fileAttached)="onFileAttached($event)"
+          (attachmentAdded)="onAttachmentAdded($event)"
           (messageTyping)="onMessageTyping($event)"
         />
       </div>
@@ -567,11 +567,11 @@ import { ChatHeaderComponent } from '../chat-header/chat-header.component';
 export class ChatInterfaceComponent implements OnInit, OnDestroy {
   private readonly chatService = inject(ChatService);
   private readonly destroy$ = new Subject<void>();
-
   // UI State
   readonly sidebarOpen = signal(true);
   readonly selectedModel = signal(''); // Inicialmente vacío
   readonly displaySuggestions = signal(true); // Nuevo signal para controlar sugerencias
+  readonly pendingAttachments = signal<ChatAttachment[]>([]); // Store attachments temporarily
 
   // Chat State from service
   readonly conversations = this.chatService.conversations;
@@ -727,22 +727,33 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         
         console.log('[ChatInterface] 📨 Enviando mensaje a conversación:', conversationId);
         console.log('[ChatInterface] 🤖 Modelo final para la solicitud:', modelToUse);
+          // Get pending attachments
+        const attachments = this.pendingAttachments();
         
-        // Enviar el mensaje con el modelo verificado
+        // Enviar el mensaje con el modelo verificado y attachments
         await this.chatService.sendMessage({
           message: content,
           conversationId,
-          model: modelToUse
+          model: modelToUse,
+          attachments: attachments.length > 0 ? attachments : undefined
         });
+
+        // Clear pending attachments after sending
+        this.pendingAttachments.set([]);
       }
     } catch (error) {
       console.error('[ChatInterface] Error al enviar mensaje:', error);
     }
-  }
-  onFileAttached(file: File): void {
+  }  onFileAttached(file: File): void {
     // TODO: Implement file attachment handling
     console.log('File attached:', file);
     // This could upload the file and add its content to the next message
+  }
+
+  onAttachmentAdded(attachment: ChatAttachment): void {
+    console.log('Image attachment added:', attachment);
+    // Store the attachment temporarily until message is sent
+    this.pendingAttachments.update(attachments => [...attachments, attachment]);
   }
   onMessageTyping(isTyping: boolean): void {
     // TODO: Implement typing indicator for real-time collaboration

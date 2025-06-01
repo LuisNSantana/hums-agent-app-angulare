@@ -12,13 +12,16 @@ import {
   ElementRef,
   effect,
   inject,
-  DestroyRef
+  DestroyRef,
+  ChangeDetectorRef
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { fromEvent } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
+import { ChatAttachment } from '../../shared/models/chat.models';
+import { ChatService } from '../../core/services/chat.service';
 
 @Component({
   selector: 'app-chat-input',
@@ -41,13 +44,13 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
             </svg>
           </button>
 
-          <!-- Text input -->
-          <textarea
+          <!-- Text input -->          <textarea
             #messageInput
             class="message-input"
             [value]="message()"
             (input)="onMessageChange($event)"
             (keydown)="onKeyDown($event)"
+            (paste)="onPaste($event)"
             [placeholder]="placeholder()"
             [disabled]="disabled()"
             [style.height.px]="inputHeight()"
@@ -58,6 +61,35 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
           <!-- Character counter -->
           <div class="char-counter" [class.warning]="isNearLimit()">
             {{ message().length }}/32000
+          </div>        </div>
+
+        <!-- Attached Images Preview -->
+        <div class="attachments-preview" *ngIf="currentAttachments().length > 0">
+          <div class="attachment-item" *ngFor="let attachment of currentAttachments(); trackBy: trackByAttachment">
+            <img *ngIf="attachment.type === 'image'" [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
+            <div class="attachment-info">
+              <span class="attachment-name">{{ attachment.name }}</span>
+              <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+            </div>
+            <button type="button" class="attachment-remove" (click)="removeAttachment(attachment.id)" title="Remove attachment">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Suggestions (when input is empty) -->
+        <div class="suggestions" *ngIf="showSuggestions() && suggestions().length > 0 && !message()">
+          <h4>Suggestions:</h4>
+          <div class="suggestion-list">
+            <button 
+              class="suggestion-item"
+              *ngFor="let suggestion of suggestions(); trackBy: trackBySuggestion"
+              (click)="onSuggestionClick(suggestion.text)">
+              <span class="suggestion-icon">{{ suggestion.icon }}</span>
+              <span class="suggestion-text">{{ suggestion.text }}</span>
+            </button>
           </div>
         </div>
 
@@ -78,22 +110,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
         </button>
       </div>
 
-      <!-- Suggestions (when input is empty) -->
-      @if (showSuggestions() && suggestions().length > 0 && !message()) {
-        <div class="suggestions">
-          <h4>Suggestions:</h4>
-          <div class="suggestion-list">
-            @for (suggestion of suggestions(); track suggestion.id) {
-              <button 
-                class="suggestion-item"
-                (click)="onSuggestionClick(suggestion.text)">
-                <span class="suggestion-icon">{{ suggestion.icon }}</span>
-                <span class="suggestion-text">{{ suggestion.text }}</span>
-              </button>
-            }
-          </div>
-        </div>
-      }
+      <!-- Other UI sections -->
     </div>
   `,  styles: [`    .chat-input-container {
       background: var(--mat-app-glass-bg);
@@ -322,9 +339,7 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       height: 2px;
       background: var(--mat-app-gradient-primary);
       border-radius: 1px;
-    }
-
-    .suggestions h4 {
+    }    .suggestions h4 {
       margin: 0 0 12px 0;
       font-size: 13px;
       font-weight: 600;
@@ -333,7 +348,97 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
       background-clip: text;
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
-    }    .suggestion-list {
+    }    /* Attachments Preview Styles */
+    .attachments-preview {
+      margin-top: 16px;
+      padding: 12px;
+      background: var(--mat-app-surface-container);
+      border: 1px solid var(--mat-app-border);
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      animation: slideInUp 0.3s ease-out;
+    }
+
+    @keyframes slideInUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .attachment-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 8px;
+      background: var(--mat-app-surface-elevated);
+      border: 1px solid var(--mat-app-border);
+      border-radius: 8px;
+      position: relative;
+      transition: all 0.2s ease;
+    }
+
+    .attachment-item:hover {
+      transform: translateY(-1px);
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .attachment-image {
+      width: 48px;
+      height: 48px;
+      object-fit: cover;
+      border-radius: 6px;
+      border: 1px solid var(--mat-app-border);
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .attachment-info {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .attachment-name {
+      font-weight: 500;
+      color: var(--mat-app-on-surface);
+      font-size: 14px;
+    }
+
+    .attachment-size {
+      font-size: 12px;
+      color: var(--mat-app-on-surface-variant);
+    }
+
+    .attachment-remove {
+      background: var(--mat-app-error);
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--mat-app-on-error);
+      transition: all 0.2s ease;
+    }
+
+    .attachment-remove:hover {
+      background: var(--mat-app-error-variant);
+      transform: scale(1.1);
+    }
+
+    .attachment-remove svg {
+      width: 12px;
+      height: 12px;
+    }.suggestion-list {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 10px;
@@ -558,38 +663,37 @@ import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
     @media (pointer: coarse) {
       .suggestion-item {
         min-height: 44px; /* Ensure touch targets are large enough */
-      }
-
-      .attachment-btn,
+      }      .attachment-btn,
       .send-btn {
         min-height: 44px;
         min-width: 44px;
       }
-    } }
     }
   `]
 })
 export class ChatInputComponent {
   private readonly destroyRef = inject(DestroyRef);
-  
-  // Inputs
-  readonly placeholder = input<string>('Type your message...');
+    // Inputs
+  readonly placeholder = input<string>('Type your message... (Ctrl+V to paste images)');
   readonly disabled = input<boolean>(false);
   readonly showSuggestions = input<boolean>(true);
   readonly showModelSelector = input<boolean>(false);
   readonly availableModels = input<any[]>([]);
   readonly selectedModel = input<string>('');
-
   // Outputs
   readonly messageSent = output<string>();
   readonly modelChanged = output<string>();
   readonly fileAttached = output<File>();
   readonly messageTyping = output<boolean>();
+  readonly attachmentAdded = output<ChatAttachment>();
 
   // Internal state
   readonly message = signal<string>('');
   readonly inputHeight = signal<number>(40);
   
+  // Signals to track current attachments
+  readonly currentAttachments = signal<ChatAttachment[]>([]);
+
   // Computed values
   readonly canSend = signal<boolean>(false);
   readonly isNearLimit = signal<boolean>(false);
@@ -605,8 +709,10 @@ export class ChatInputComponent {
 
   // View references
   private readonly messageInput = viewChild<ElementRef<HTMLTextAreaElement>>('messageInput');
-
   constructor() {
+    const chatService = inject(ChatService);
+    const destroyRef = inject(DestroyRef);
+    
     // Update computed values when message changes
     effect(() => {
       const msg = this.message().trim();
@@ -634,7 +740,6 @@ export class ChatInputComponent {
     this.message.set(target.value);
     this.adjustTextareaHeight(target);
   }
-
   /**
    * Handle keyboard shortcuts
    */
@@ -657,17 +762,69 @@ export class ChatInputComponent {
       this.onSend();
     }
   }
-
   /**
-   * Send message
+   * Handle clipboard paste events for images
+   */
+  onPaste(event: ClipboardEvent): void {
+    const clipboardItems = event.clipboardData?.items;
+    if (!clipboardItems) return;
+    for (let i = 0; i < clipboardItems.length; i++) {
+      const item = clipboardItems[i];
+      if (item.type.startsWith('image/')) {
+        const file = item.getAsFile();
+        if (file) this.handleImageAttachment(file);
+      }
+    }
+  }
+  /**
+   * Send message (with optional attachments for multimodal)
    */
   onSend(): void {
     const msg = this.message().trim();
-    if (msg && this.canSend()) {
-      this.messageSent.emit(msg);
+    const attachments = this.currentAttachments();
+    
+    if ((msg || attachments.length > 0) && this.canSend()) {
+      // If we have attachments, emit them too
+      if (attachments.length > 0) {
+        // For multimodal messages, we'll modify the interface to handle this
+        this.messageSent.emit(msg || 'Analyze this image:');
+        // Emit attachments separately for now
+        attachments.forEach(attachment => {
+          this.attachmentAdded.emit(attachment);
+        });
+      } else {
+        // Regular text message
+        this.messageSent.emit(msg);
+      }
+      
       this.message.set('');
+      this.clearAttachments();
       this.resetTextareaHeight();
     }
+  }
+
+  /**
+   * Clear all attachments
+   */
+  private clearAttachments(): void {
+    // Clean up object URLs
+    this.currentAttachments().forEach(attachment => {
+      if (attachment.url) {
+        URL.revokeObjectURL(attachment.url);
+      }
+    });
+    this.currentAttachments.set([]);
+  }
+
+  /**
+   * Format file size for display
+   */
+  formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
   }
 
   /**
@@ -685,23 +842,97 @@ export class ChatInputComponent {
     const target = event.target as HTMLSelectElement;
     this.modelChanged.emit(target.value);
   }
-
   /**
-   * Handle file attachment
+   * Handle file attachment (supports both documents and images for multimodal)
    */
   onAttachFile(): void {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.txt,.md,.pdf,.doc,.docx,.json,.csv';
+    // Extended to support images for multimodal capabilities with Gemma 3
+    input.accept = '.txt,.md,.pdf,.doc,.docx,.json,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp';
+    input.multiple = false; // For now, single file only
     
-    input.onchange = (event) => {
+    input.onchange = async (event) => {
       const file = (event.target as HTMLInputElement).files?.[0];
       if (file) {
-        this.fileAttached.emit(file);
+        // Check if it's an image for multimodal support
+        if (file.type.startsWith('image/')) {
+          await this.handleImageAttachment(file);
+        } else {
+          // Handle regular document files as before
+          this.fileAttached.emit(file);
+        }
       }
     };
     
     input.click();
+  }
+  /**
+   * Handle image attachment for multimodal AI analysis
+   */
+  private async handleImageAttachment(file: File): Promise<void> {
+    try {
+      // Convert image to base64 for AI processing
+      const base64 = await this.fileToBase64(file);
+      
+      // Generate a descriptive name if the file doesn't have one
+      const fileName = file.name || `pasted-image-${Date.now()}.${file.type.split('/')[1] || 'png'}`;
+      
+      // Create attachment object
+      const attachment = {
+        id: crypto.randomUUID(),
+        name: fileName,
+        type: 'image' as const,
+        size: file.size,
+        mimeType: file.type,
+        base64: base64,
+        url: URL.createObjectURL(file) // For preview
+      };
+
+      // Add to current attachments
+      this.currentAttachments.update(attachments => [...attachments, attachment]);
+      
+      // Focus input for user to add text description
+      this.focusInput();
+      
+      console.log('[ChatInput] ✅ Imagen adjuntada:', fileName, this.formatFileSize(file.size));
+      
+    } catch (error) {
+      console.error('[ChatInput] ❌ Error procesando imagen:', error);
+      // TODO: Show error message to user
+    }
+  }
+
+  /**
+   * Convert file to base64 string
+   */
+  private fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove data URL prefix to get pure base64
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  /**
+   * Remove an attachment
+   */
+  removeAttachment(attachmentId: string): void {
+    this.currentAttachments.update(attachments => {
+      const updated = attachments.filter(a => a.id !== attachmentId);
+      // Clean up object URLs to prevent memory leaks
+      const removed = attachments.find(a => a.id === attachmentId);
+      if (removed?.url) {
+        URL.revokeObjectURL(removed.url);
+      }
+      return updated;
+    });
   }
 
   /**
@@ -758,5 +989,19 @@ export class ChatInputComponent {
    */
   private isMobile(): boolean {
     return /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
+  /**
+   * trackBy function for attachments list
+   */
+  trackByAttachment(index: number, attachment: ChatAttachment): string {
+    return attachment.id;
+  }
+
+  /**
+   * trackBy function for suggestions list
+   */
+  trackBySuggestion(index: number, suggestion: { id: number; icon: string; text: string }): number {
+    return suggestion.id;
   }
 }
