@@ -37,6 +37,7 @@ export class ChatService {
   private readonly _messages = signal<ChatMessage[]>([]);
   private readonly _isProcessing = signal<boolean>(false);
   private readonly _availableModels = signal<AIModel[]>([]);
+  private readonly _defaultModel = signal<AIModel | null>(null);
   
   // Subjects for streaming
   private readonly streamSubject = new Subject<StreamChunk>();
@@ -47,13 +48,35 @@ export class ChatService {
   readonly messages = this._messages.asReadonly();
   readonly isProcessing = this._isProcessing.asReadonly();
   readonly availableModels = this._availableModels.asReadonly();
+  readonly defaultModel = this._defaultModel.asReadonly();
   
   // Stream observable
   readonly messageStream$ = this.streamSubject.asObservable();
-
   constructor() {
-    this.loadAvailableModels();
-    this.loadConversations();
+    // Inicializar estados
+    console.log('[ChatService] 🚀 Inicializando servicio de chat');
+    
+    // Cargar modelos y conversaciones
+    this.initializeService();
+  }
+  
+  /**
+   * Inicializa el servicio cargando datos necesarios
+   */
+  private async initializeService(): Promise<void> {
+    try {
+      console.log('[ChatService] 🔄 Inicializando datos del servicio');
+      
+      // Primero cargar modelos para tenerlos disponibles antes de cargar conversaciones
+      await this.loadAvailableModels();
+      
+      // Luego cargar conversaciones (que pueden depender de modelos)
+      await this.loadConversations();
+      
+      console.log('[ChatService] ✅ Servicio inicializado correctamente');
+    } catch (error) {
+      console.error('[ChatService] ❌ Error al inicializar el servicio:', error);
+    }
   }
   /**
    * Sends a message and handles streaming response
@@ -405,7 +428,6 @@ export class ChatService {
   getPromptCategories() {
     return this.systemPromptsService.getAvailableCategories();
   }
-
   /**
    * Creates a new conversation
    */
@@ -415,9 +437,14 @@ export class ChatService {
       await this.authService.ensureUserProfile();
       const conversationTitle = title || this.generateConversationTitle(firstMessage) || 'New Conversation';
       console.log('[ChatService] Creando conversación:', conversationTitle);
+      
+      // Usar el modelo por defecto en lugar de hardcodear
+      const defaultModelId = this.getDefaultModelId();
+      console.log('[ChatService] Usando modelo por defecto para conversación:', defaultModelId);
+      
       const conversation = await this.supabaseService.createConversation(
         conversationTitle,
-        'deepseek-r1:7b'
+        defaultModelId
       );
       console.log('[ChatService] Conversación creada en BD:', conversation);
       const conversations = [...this._conversations(), conversation];
@@ -494,16 +521,25 @@ export class ChatService {
    * Loads available AI models from Supabase and Ollama
    */
   private async loadAvailableModels(): Promise<void> {
+    console.log('[ChatService] 🔄 Loading available models...');
+    
     try {
       // Get models from Supabase database
+      console.log('[ChatService] 📊 Fetching models from database...');
       const dbModels = await this.supabaseService.getAIModels();
+      console.log('[ChatService] 📊 Database models loaded:', dbModels.length);
+      dbModels.forEach(model => {
+        console.log(`  - ${model.name} (${model.id}) [${model.provider}] - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
+      });
       
       // Try to get live models from Ollama to update availability
+      console.log('[ChatService] 🚀 Checking Ollama availability...');
       try {
         const response = await fetch('http://localhost:11434/api/tags');
         if (response.ok) {
           const data = await response.json();
           const ollamaModelNames = data.models.map((model: any) => model.name);
+          console.log('[ChatService] 🚀 Ollama models available:', ollamaModelNames);
           
           // Update availability based on what's actually running in Ollama
           const updatedModels = dbModels.map(model => ({
@@ -513,18 +549,27 @@ export class ChatService {
               model.isAvailable
           }));
           
+          console.log('[ChatService] ✅ Models updated with Ollama availability:');
+          updatedModels.forEach(model => {
+            console.log(`  - ${model.name} (${model.id}) - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
+          });
+          
           this._availableModels.set(updatedModels);
+          this.setDefaultModel(updatedModels);
+          console.log('[ChatService] ✅ Models loaded successfully with Ollama sync');
           return;
         }
       } catch (ollamaError) {
-        console.warn('Could not connect to Ollama, using database models only:', ollamaError);
+        console.warn('[ChatService] ⚠️ Could not connect to Ollama, using database models only:', ollamaError);
       }
-
+      
       // Use database models as-is if Ollama is not available
+      console.log('[ChatService] 📊 Using database models without Ollama sync');
       this._availableModels.set(dbModels);
+      this.setDefaultModel(dbModels);
       
     } catch (error) {
-      console.error('Failed to load models from database:', error);
+      console.error('[ChatService] ❌ Failed to load models from database:', error);
       
       // Fallback to hardcoded models
       const fallbackModels: AIModel[] = [
@@ -537,6 +582,7 @@ export class ChatService {
           isAvailable: false
         }
       ];
+      console.log('[ChatService] 🔄 Using fallback models:', fallbackModels);
       this._availableModels.set(fallbackModels);
     }
   }
@@ -623,5 +669,95 @@ export class ChatService {
     
     // Add ellipsis if truncated
     return title + (title.length < cleaned.length ? '...' : '');
+  }
+
+  /**
+   * Gets the default AI model from database configuration
+   */
+  getDefaultModel(): AIModel | null {
+    return this._defaultModel();
+  }
+  /**
+   * Gets the default model ID for use in chat requests
+   */
+  getDefaultModelId(): string {
+    const defaultModel = this._defaultModel();
+    
+    if (defaultModel) {
+      console.log('[ChatService] 📌 Usando modelo predeterminado:', defaultModel.name, `(${defaultModel.id})`);
+      return defaultModel.id;
+    }
+    
+    // Si no hay modelo predeterminado configurado, usar Gemma 3:4b como fallback
+    console.log('[ChatService] ⚠️ No hay modelo predeterminado configurado, usando Gemma 3:4b como fallback');
+    
+    // Verificar si Gemma 3:4b existe en la lista de modelos
+    const models = this._availableModels();
+    const gemmaModel = models.find(m => m.id === 'gemma3:4b');
+    
+    if (gemmaModel) {
+      console.log('[ChatService] ✅ Modelo Gemma 3:4b encontrado y disponible');
+    } else {
+      console.log('[ChatService] ⚠️ Modelo Gemma 3:4b no encontrado en la lista de modelos disponibles');
+    }
+    
+    return 'gemma3:4b'; // Fallback to Gemma 3:4b
+  }  /**
+   * Sets the default model based on database configuration
+   */  private setDefaultModel(models: AIModel[]): void {
+    console.log('[ChatService] 🔍 Seleccionando modelo predeterminado...');
+    
+    // SIEMPRE crear un modelo Gemma 3:4b virtual si no existe en la lista
+    let gemmaModel = models.find(m => m.id === 'gemma3:4b');
+    
+    if (!gemmaModel && models.length > 0) {
+      // Si no existe el modelo Gemma pero hay otros modelos, crea una versión virtual
+      console.log('[ChatService] ⚠️ Modelo Gemma 3:4b no encontrado, creando versión virtual');
+      gemmaModel = {
+        id: 'gemma3:4b',
+        name: 'Gemma 3:4b',
+        provider: 'local',
+        description: 'Gemma 3:4b model running locally via Ollama',
+        contextWindow: 32768,
+        isAvailable: true,
+        configuration: { 'is_default': true }
+      };
+      
+      // Añadir el modelo Gemma al principio de la lista para que aparezca primero en el selector
+      const updatedModels = [gemmaModel, ...models];
+      this._availableModels.set(updatedModels);
+      console.log('[ChatService] ✅ Modelo Gemma 3:4b añadido a la lista de modelos disponibles');
+    }
+    
+    // Siempre establecer Gemma como modelo predeterminado si existe
+    if (gemmaModel) {
+      this._defaultModel.set(gemmaModel);
+      console.log('[ChatService] ✅ Modelo Gemma 3:4b establecido como predeterminado:', gemmaModel.name, `(${gemmaModel.id})`);
+      return;
+    }
+    
+    // Fallback: si por alguna razón no se pudo encontrar o crear Gemma, usar configuración de DB
+    const configuredDefault = models.find(model => 
+      model.configuration && 
+      typeof model.configuration === 'object' && 
+      'is_default' in model.configuration && 
+      model.configuration['is_default'] === true
+    );
+    
+    if (configuredDefault) {
+      this._defaultModel.set(configuredDefault);
+      console.log('[ChatService] ⚠️ Usando modelo configurado en DB como predeterminado:', configuredDefault.name, `(${configuredDefault.id})`);
+      return;
+    }
+    
+    // Último recurso: usar cualquier modelo disponible
+    const availableModel = models.find(m => m.isAvailable) || (models.length > 0 ? models[0] : null);
+    
+    if (availableModel) {
+      this._defaultModel.set(availableModel);
+      console.log('[ChatService] ⚠️ Usando modelo alternativo como predeterminado:', availableModel.name, `(${availableModel.id})`);
+    } else {
+      console.log('[ChatService] ❌ No hay modelos disponibles para establecer como predeterminado');
+    }
   }
 }

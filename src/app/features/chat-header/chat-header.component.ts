@@ -1,5 +1,24 @@
 /**
- * ChatHeaderComponent - Main chat header with model selection and controls
+ * ChatHeaderComponent - Main chat header with model selec        <!-- Model Selection -->
+        @if (availableModels().length > 0) {
+          <div class="model-selector">
+            <label class="model-label">Model:</label>
+            <select 
+              class="model-select"
+              [value]="selectedModel()"
+              (change)="onModelChange($event)"
+            >
+              @for (model of sortedModels(); track model.id) {
+                <option [value]="model.id" [disabled]="!model.isAvailable">
+                  {{ model.name }}
+                  @if (model.id === 'gemma3:4b') {
+                    ★
+                  }
+                  @if (!model.isAvailable) {
+                    (Unavailable)
+                  }
+                </option>
+              }
  * Following Angular 20+ patterns with signals and modern UI
  */
 
@@ -9,7 +28,8 @@ import {
   output, 
   signal,
   computed,
-  inject
+  inject,
+  OnInit
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -69,10 +89,12 @@ import { AuthService } from '../../core/services/auth.service';
               class="model-select"
               [value]="selectedModel()"
               (change)="onModelChange($event)"
-            >
-              @for (model of availableModels(); track model.id) {
+            >              @for (model of sortedModels(); track model.id) {
                 <option [value]="model.id" [disabled]="!model.isAvailable">
                   {{ model.name }}
+                  @if (model.id === 'gemma3:4b') {
+                    ★ 
+                  }
                   @if (!model.isAvailable) {
                     (Unavailable)
                   }
@@ -772,7 +794,7 @@ import { AuthService } from '../../core/services/auth.service';
     }
   `]
 })
-export class ChatHeaderComponent {
+export class ChatHeaderComponent implements OnInit {
   // Injected services
   private readonly router = inject(Router);
   private readonly authService = inject(AuthService);
@@ -796,6 +818,24 @@ export class ChatHeaderComponent {
   readonly isAuthenticated = computed(() => this.authService.isAuthenticated());
 
   // Computed values
+  readonly sortedModels = computed(() => {
+    const models = this.availableModels();
+    
+    // Sort models: Gemma 3:4b first, then available models, then unavailable models
+    return [...models].sort((a, b) => {
+      // Gemma 3:4b always first
+      if (a.id === 'gemma3:4b') return -1;
+      if (b.id === 'gemma3:4b') return 1;
+      
+      // Then sort by availability
+      if (a.isAvailable && !b.isAvailable) return -1;
+      if (!a.isAvailable && b.isAvailable) return 1;
+      
+      // Then sort alphabetically
+      return a.name.localeCompare(b.name);
+    });
+  });
+  
   readonly selectedModelInfo = computed(() => {
     const modelId = this.selectedModel();
     return this.availableModels().find(model => model.id === modelId) || null;
@@ -816,13 +856,36 @@ export class ChatHeaderComponent {
   onToggleSidebar(): void {
     this.toggleSidebar.emit();
   }
-
   /**
    * Handle model selection change
    */
   onModelChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
-    this.modelChanged.emit(target.value);
+    const newModelId = target.value;
+    
+    console.log('[ChatHeader] 🔄 Model changed to:', newModelId);
+    this.modelChanged.emit(newModelId);
+  }
+  
+  /**
+   * Angular lifecycle hook - After component is initialized
+   * Ensures Gemma 3:4b is selected by default
+   */
+  ngOnInit(): void {
+    // Check if Gemma 3:4b is available and select it by default if no model is selected
+    setTimeout(() => {
+      const currentSelection = this.selectedModel();
+      const models = this.availableModels();
+      
+      if ((!currentSelection || currentSelection === 'deepseek-r1:7b') && models.length > 0) {
+        const gemmaModel = models.find(m => m.id === 'gemma3:4b');
+        
+        if (gemmaModel) {
+          console.log('[ChatHeader] 🔄 Auto-selecting Gemma 3:4b as default model');
+          this.modelChanged.emit('gemma3:4b');
+        }
+      }
+    }, 100); // Small delay to ensure models are loaded
   }
 
   /**

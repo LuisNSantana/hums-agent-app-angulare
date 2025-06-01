@@ -583,18 +583,61 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   // Computed values
   readonly currentConversationId = computed(() => 
     this.currentConversation()?.id || null
-  );
-
-  constructor() {
+  );  constructor() {
     // Auto-hide sidebar on mobile
     this.handleResponsiveLayout();
-    // Sincroniza selectedModel con el primer modelo local disponible
+    
+    // Sincroniza selectedModel con el modelo por defecto cuando se cargan los modelos
     effect(() => {
       const models = this.availableModels();
-      // Si no hay modelo seleccionado o el seleccionado no es válido, selecciona uno válido
-      if (models.length > 0 && (!this.selectedModel() || !models.some(m => m.id === this.selectedModel()))) {
-        const local = models.find(m => m.provider === 'local' && m.isAvailable);
-        this.selectedModel.set(local?.id || models[0].id);
+      const defaultModel = this.chatService.getDefaultModel();
+      const currentSelection = this.selectedModel();
+      
+      console.log('[ChatInterface] 🔄 Effect de modelo - Models:', models.length, 'Default:', defaultModel?.name, 'Current:', currentSelection);
+      
+      if (models.length > 0) {
+        // Prioridad 1: Mantener la selección actual si es válida
+        if (currentSelection) {
+          const isValidSelection = models.some(m => m.id === currentSelection);
+          if (isValidSelection) {
+            console.log('[ChatInterface] ✓ Manteniendo selección actual válida:', currentSelection);
+            return; // Mantener la selección actual
+          } else {
+            console.log('[ChatInterface] ✗ Selección actual inválida:', currentSelection);
+          }
+        }
+        
+        // Prioridad 2: Usar el modelo por defecto de la configuración
+        if (defaultModel) {
+          const isDefaultAvailable = defaultModel.isAvailable || models.some(m => m.id === 'gemma3:4b');
+          if (isDefaultAvailable) {
+            this.selectedModel.set(defaultModel.id);
+            console.log('[ChatInterface] ✅ Modelo por defecto seleccionado:', defaultModel.name, '(', defaultModel.id, ')');
+            return;
+          } else {
+            console.log('[ChatInterface] ⚠️ Modelo por defecto no disponible:', defaultModel.name);
+          }
+        }
+        
+        // Prioridad 3: Gemma 3:4b específicamente (si existe)
+        const gemmaModel = models.find(m => m.id === 'gemma3:4b');
+        if (gemmaModel) {
+          this.selectedModel.set('gemma3:4b');
+          console.log('[ChatInterface] ✅ Modelo Gemma 3:4b seleccionado explícitamente');
+          return;
+        }
+        
+        // Prioridad 4: Cualquier modelo disponible
+        const availableModel = models.find(m => m.isAvailable);
+        if (availableModel) {
+          this.selectedModel.set(availableModel.id);
+          console.log('[ChatInterface] ℹ️ Usando primer modelo disponible:', availableModel.name, '(', availableModel.id, ')');
+          return;
+        }
+        
+        // Última opción: Simplemente usar el primer modelo de la lista
+        this.selectedModel.set(models[0].id);
+        console.log('[ChatInterface] ⚠️ Usando primer modelo de la lista (puede no estar disponible):', models[0].name);
       }
     });
 
@@ -661,25 +704,35 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         if (window.innerWidth < 768) {
           this.sidebarOpen.set(false);
         }
-      }
-      if (conversationId) {
-        // Find the selected model object to get its model_id string (should be the 'id' for Ollama, but if the model is selected by UUID, map to the correct id)
+      }      if (conversationId) {
+        // Obtener el ID del modelo seleccionado en la UI
         const selectedModelId = this.selectedModel();
-        // Try to find by id (Ollama id) or by a custom UUID mapping if available in your model list
-        let model_id = selectedModelId;
-        // If your AIModel type only has 'id', ensure the model selector always uses the Ollama id (e.g., 'deepseek-r1:7b')
-        // If you have a separate UUID mapping, you need to maintain a map from UUID to model_id
-        // For now, only use the id property, which should be the Ollama model name
+        
+        // Verificar que el modelo existe y está disponible
+        let modelToUse = '';
         const selectedModelObj = this.availableModels().find(m => m.id === selectedModelId);
-        if (selectedModelObj) {
-          model_id = selectedModelObj.id;
+        
+        if (selectedModelObj && selectedModelObj.isAvailable) {
+          // Usar el modelo seleccionado en la UI si está disponible
+          modelToUse = selectedModelObj.id;
+          console.log('[ChatInterface] 🔹 Usando modelo seleccionado:', selectedModelObj.name, '(', modelToUse, ')');
+        } else {
+          // Si no hay modelo seleccionado o no está disponible, usar el predeterminado
+          modelToUse = this.chatService.getDefaultModelId();
+          console.log('[ChatInterface] ⚠️ Modelo seleccionado no válido, usando predeterminado:', modelToUse);
+          
+          // Actualizar también el selector de UI para reflejar el modelo real que se está usando
+          this.selectedModel.set(modelToUse);
         }
-        console.log('[ChatInterface] Enviando mensaje a conversación:', conversationId);
-        console.log('[ChatInterface] Modelo seleccionado (Ollama id):', model_id);
+        
+        console.log('[ChatInterface] 📨 Enviando mensaje a conversación:', conversationId);
+        console.log('[ChatInterface] 🤖 Modelo final para la solicitud:', modelToUse);
+        
+        // Enviar el mensaje con el modelo verificado
         await this.chatService.sendMessage({
           message: content,
           conversationId,
-          model: model_id
+          model: modelToUse
         });
       }
     } catch (error) {
@@ -732,10 +785,45 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     // TODO: Implement message editing logic
     console.log('Editing message:', messageId, newContent);
     // This would update the message content and potentially trigger regeneration
-  }
-
-  onModelChanged(modelId: string): void {
-    this.selectedModel.set(modelId);
+  }  onModelChanged(modelId: string): void {
+    console.log('[ChatInterface] 📝 Usuario cambió modelo a:', modelId);
+    
+    // Validar que el modelo existe y está disponible
+    const model = this.availableModels().find(m => m.id === modelId);
+    
+    if (model) {
+      if (model.isAvailable) {
+        this.selectedModel.set(modelId);
+        console.log('[ChatInterface] ✅ Modelo seleccionado válido y disponible:', model.name, '(', model.id, ')');
+      } else {
+        console.warn('[ChatInterface] ⚠️ Modelo seleccionado no disponible:', model.name);
+        // Intentar seleccionar otro modelo disponible
+        const defaultModel = this.chatService.getDefaultModel();
+        
+        if (defaultModel && defaultModel.isAvailable) {
+          this.selectedModel.set(defaultModel.id);
+          console.log('[ChatInterface] 🔁 Cambiando a modelo por defecto disponible:', defaultModel.name);
+        } else {
+          // Buscar cualquier modelo disponible
+          const anyAvailableModel = this.availableModels().find(m => m.isAvailable);
+          if (anyAvailableModel) {
+            this.selectedModel.set(anyAvailableModel.id);
+            console.log('[ChatInterface] 🔁 Cambiando a modelo disponible:', anyAvailableModel.name);
+          }
+        }
+      }
+    } else {
+      console.error('[ChatInterface] ❌ Modelo no encontrado:', modelId);
+      
+      // Intentar seleccionar el modelo predeterminado como fallback
+      const defaultModelId = this.chatService.getDefaultModelId();
+      console.log('[ChatInterface] 🔍 Buscando modelo predeterminado:', defaultModelId);
+      
+      if (defaultModelId) {
+        this.selectedModel.set(defaultModelId);
+        console.log('[ChatInterface] 🔄 Usando modelo predeterminado como fallback:', defaultModelId);
+      }
+    }
   }
 
   toggleSidebar(): void {

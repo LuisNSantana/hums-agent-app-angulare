@@ -46,6 +46,7 @@ export interface AIModel {
   description: string;
   contextWindow: number;
   isAvailable: boolean;
+  configuration?: Record<string, any>;
 }
 
 export interface ChatRequest {
