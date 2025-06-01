@@ -236,7 +236,14 @@ html, body {
 .mat-mdc-raised-button.mat-primary {
   background: var(--mat-app-gradient-primary) !important;
   color: var(--mat-app-on-primary) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border: 3px solid var(--mat-app-primary-light) !important;
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.4) !important;
+  font-size: 1.1rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  padding: 0.5rem 1.5rem !important;
+  height: auto !important;
+  min-height: 48px !important;
 }
 
 .mat-mdc-raised-button.mat-accent {

@@ -8,11 +8,13 @@ import { ProfileService } from '../../../core/services/auth'; // Specific Profil
 import { AuthUser, UserPreferences } from '../../../core/services/auth'; // Updated types
 import { AuthStateService } from '../../../core/services/auth'; // For current user state
 import { MaterialModule } from '../../../shared/modules/material.module'; // Angular Material
+import { PasswordStrengthValidator } from '../../../core/validators/password-strength.validator';
+import { PasswordStrengthIndicatorComponent } from '../../../shared/components/password-strength-indicator/password-strength-indicator.component';
 
 @Component({
   selector: 'app-profile',
   standalone: true,
-  imports: [CommonModule, ReactiveFormsModule, RouterModule, MaterialModule],
+  imports: [CommonModule, ReactiveFormsModule, RouterModule, MaterialModule, PasswordStrengthIndicatorComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,  template: `
     <div class="profile-container">
       <div class="profile-content">        <!-- Header -->
@@ -211,18 +213,20 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                     </mat-card>
 
                     <!-- Password Change Form -->
-                    <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="profile-form">                      <mat-form-field appearance="outline">
+                    <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="profile-form">
+                      <mat-form-field appearance="outline">
                         <mat-label>Current Password</mat-label>
-                        <input matInput type="password" formControlName="currentPassword" required>
+                        <input matInput type="password" formControlName="currentPassword" required autocomplete="current-password">
                         @if (passwordForm.get('currentPassword')?.hasError('required')) {
                           <mat-error>
                             Current password is required
                           </mat-error>
                         }
-                      </mat-form-field>                      <mat-form-field appearance="outline">
+                      </mat-form-field>
+                      <mat-form-field appearance="outline">
                         <mat-label>New Password</mat-label>
-                        <input matInput type="password" formControlName="newPassword" required>
-                        <mat-hint>Minimum 8 characters</mat-hint>
+                        <input matInput type="password" formControlName="newPassword" required autocomplete="new-password" (input)="onNewPasswordInput()">
+                        <mat-hint>Minimum 8 characters, strong password recommended</mat-hint>
                         @if (passwordForm.get('newPassword')?.hasError('required')) {
                           <mat-error>
                             New password is required
@@ -233,9 +237,19 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                             Password must be at least 8 characters long
                           </mat-error>
                         }
-                      </mat-form-field>                      <mat-form-field appearance="outline">
+                        @if (passwordForm.get('newPassword')?.hasError('passwordStrength')) {
+                          <mat-error>
+                            {{ passwordForm.get('newPassword')?.getError('passwordStrength')?.feedback?.warning || 'Password is too weak' }}
+                          </mat-error>
+                        }
+                      </mat-form-field>
+                      <app-password-strength-indicator
+                        [password]="passwordForm.get('newPassword')?.value"
+                        class="password-strength-indicator"
+                      ></app-password-strength-indicator>
+                      <mat-form-field appearance="outline">
                         <mat-label>Confirm New Password</mat-label>
-                        <input matInput type="password" formControlName="confirmNewPassword" required>
+                        <input matInput type="password" formControlName="confirmNewPassword" required autocomplete="new-password">
                         @if (passwordForm.get('confirmNewPassword')?.hasError('required')) {
                           <mat-error>
                             Please confirm your new password
@@ -1191,6 +1205,12 @@ export class ProfileComponent implements OnInit {
     2: 'security'
   };
 
+  passwordStrengthScore = 0;
+  passwordStrengthFeedback: any = {};
+
+  passwordStrength: number = 0;
+  passwordFeedback: string = '';
+
   constructor() {
     this.profileForm = this.fb.nonNullable.group({
       displayName: ['', [Validators.required, Validators.minLength(3)]],
@@ -1205,12 +1225,18 @@ export class ProfileComponent implements OnInit {
     });
 
     this.passwordForm = this.fb.nonNullable.group({
-      currentPassword: ['', [Validators.required]], // Consider removing if not changing password
-      newPassword: ['', [Validators.required, Validators.minLength(8)]],
+      currentPassword: ['', [Validators.required]],
+      newPassword: ['', [Validators.required, Validators.minLength(8), PasswordStrengthValidator.passwordStrengthValidator()]],
       confirmNewPassword: ['', [Validators.required]]
     }, { validators: this.passwordMatchValidator });
   }
 
+  onNewPasswordInput(): void {
+    const password = this.passwordForm.get('newPassword')?.value || '';
+    const { score, feedback } = PasswordStrengthValidator.validatePassword(password);
+    this.passwordStrength = score;
+    this.passwordFeedback = feedback.join(', ');
+  }
   setActiveTab(tabId: 'profile' | 'preferences' | 'security') {
     this.activeTab.set(tabId);
   }
