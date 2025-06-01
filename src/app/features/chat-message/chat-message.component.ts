@@ -82,22 +82,26 @@ import { AuthService } from '../../core/services/auth/auth.service';
               </svg>
               {{ message().content }}
             </div>
-          } @else {
-            <!-- Attached Images (for user messages) -->
-            <div class="message-attachments" *ngIf="attachments().length > 0">
-              <div class="attachment-image"
-                   *ngFor="let attachment of attachments(); trackBy: trackByAttachment">
-                <img *ngIf="attachment.type === 'image' && attachment.url"
-                     [src]="attachment.url"
-                     [alt]="attachment.name"
-                     class="attached-image"
-                     loading="lazy" />
-                <div class="attachment-info">
-                  <span class="attachment-name">{{ attachment.name }}</span>
-                  <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
-                </div>
+          } @else {            <!-- Attached Images (for user messages) -->
+            @if (attachments().length > 0) {
+              <div class="message-attachments">
+                @for (attachment of attachments(); track attachment.id) {
+                  <div class="attachment-image">
+                    @if (attachment.type === 'image' && attachment.url) {
+                      <img 
+                        [src]="attachment.url"
+                        [alt]="attachment.name"
+                        class="attached-image"
+                        loading="lazy" />
+                    }
+                    <div class="attachment-info">
+                      <span class="attachment-name">{{ attachment.name }}</span>
+                      <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                    </div>
+                  </div>
+                }
               </div>
-            </div>
+            }
 
             <div class="message-text" [innerHTML]="formattedContent()"></div>
             

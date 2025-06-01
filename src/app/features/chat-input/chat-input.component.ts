@@ -61,37 +61,42 @@ import { ChatService } from '../../core/services/chat.service';
           <!-- Character counter -->
           <div class="char-counter" [class.warning]="isNearLimit()">
             {{ message().length }}/32000
-          </div>        </div>
-
-        <!-- Attached Images Preview -->
-        <div class="attachments-preview" *ngIf="currentAttachments().length > 0">
-          <div class="attachment-item" *ngFor="let attachment of currentAttachments(); trackBy: trackByAttachment">
-            <img *ngIf="attachment.type === 'image'" [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
-            <div class="attachment-info">
-              <span class="attachment-name">{{ attachment.name }}</span>
-              <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+          </div>        </div>        <!-- Attached Images Preview -->
+        @if (currentAttachments().length > 0) {
+          <div class="attachments-preview">
+            @for (attachment of currentAttachments(); track attachment.id) {
+              <div class="attachment-item">
+                @if (attachment.type === 'image') {
+                  <img [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
+                }
+                <div class="attachment-info">
+                  <span class="attachment-name">{{ attachment.name }}</span>
+                  <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                </div>
+                <button type="button" class="attachment-remove" (click)="removeAttachment(attachment.id)" title="Remove attachment">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            }
+          </div>
+        }        <!-- Suggestions (when input is empty) -->
+        @if (showSuggestions() && suggestions().length > 0 && !message()) {
+          <div class="suggestions">
+            <h4>Suggestions:</h4>
+            <div class="suggestion-list">
+              @for (suggestion of suggestions(); track suggestion.id) {
+                <button 
+                  class="suggestion-item"
+                  (click)="onSuggestionClick(suggestion.text)">
+                  <span class="suggestion-icon">{{ suggestion.icon }}</span>
+                  <span class="suggestion-text">{{ suggestion.text }}</span>
+                </button>
+              }
             </div>
-            <button type="button" class="attachment-remove" (click)="removeAttachment(attachment.id)" title="Remove attachment">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M18 6L6 18M6 6l12 12" />
-              </svg>
-            </button>
           </div>
-        </div>
-
-        <!-- Suggestions (when input is empty) -->
-        <div class="suggestions" *ngIf="showSuggestions() && suggestions().length > 0 && !message()">
-          <h4>Suggestions:</h4>
-          <div class="suggestion-list">
-            <button 
-              class="suggestion-item"
-              *ngFor="let suggestion of suggestions(); trackBy: trackBySuggestion"
-              (click)="onSuggestionClick(suggestion.text)">
-              <span class="suggestion-icon">{{ suggestion.icon }}</span>
-              <span class="suggestion-text">{{ suggestion.text }}</span>
-            </button>
-          </div>
-        </div>
+        }
 
         <!-- Send button -->
         <button 

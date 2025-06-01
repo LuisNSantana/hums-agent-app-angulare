@@ -25,17 +25,19 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
             <p class="mat-subtitle-1">Customize your experience and manage your account settings</p>
             <div class="header-divider"></div>
           </div>
-        </div>
-
-        <!-- Success/Error Messages -->
-        <div *ngIf="successMessage()" class="message-container success">
-          <mat-icon>check_circle</mat-icon>
-          {{ successMessage() }}
-        </div>
-        <div *ngIf="errorMessage()" class="message-container error">
-          <mat-icon>error</mat-icon>
-          {{ errorMessage() }}
-        </div>
+        </div>        <!-- Success/Error Messages -->
+        @if (successMessage()) {
+          <div class="message-container success">
+            <mat-icon>check_circle</mat-icon>
+            {{ successMessage() }}
+          </div>
+        }
+        @if (errorMessage()) {
+          <div class="message-container error">
+            <mat-icon>error</mat-icon>
+            {{ errorMessage() }}
+          </div>
+        }
 
         <!-- Main Grid -->
         <div class="profile-grid">
@@ -44,17 +46,18 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
             <mat-card-content>
               <div class="profile-user-info">                <div class="avatar-container">
                   <div class="avatar-wrapper">
-                    <mat-icon 
-                      *ngIf="!currentUser()?.avatarUrl" 
-                      class="default-avatar-icon">
-                      account_circle
-                    </mat-icon>
-                    <img
-                      *ngIf="currentUser()?.avatarUrl"
-                      [src]="currentUser()?.avatarUrl"
-                      alt="User Avatar"
-                      class="avatar-image"
-                    />
+                    @if (!currentUser()?.avatarUrl) {
+                      <mat-icon class="default-avatar-icon">
+                        account_circle
+                      </mat-icon>
+                    }
+                    @if (currentUser()?.avatarUrl) {
+                      <img
+                        [src]="currentUser()?.avatarUrl"
+                        alt="User Avatar"
+                        class="avatar-image"
+                      />
+                    }
                   </div>
                   <button mat-mini-fab color="primary" class="avatar-edit-button">
                     <mat-icon>edit</mat-icon>
@@ -94,37 +97,40 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                     <h3 class="mat-headline-6 form-title">Personal Information</h3>
                       <mat-form-field appearance="outline">
                       <mat-label>Display Name</mat-label>
-                      <input matInput formControlName="displayName" required>
-                      <mat-error *ngIf="profileForm.get('displayName')?.hasError('required')">
-                        Display name is required
-                      </mat-error>
-                      <mat-error *ngIf="profileForm.get('displayName')?.hasError('minlength')">
-                        Display name must be at least 3 characters
-                      </mat-error>
+                      <input matInput formControlName="displayName" required>                      @if (profileForm.get('displayName')?.hasError('required')) {
+                        <mat-error>
+                          Display name is required
+                        </mat-error>
+                      }
+                      @if (profileForm.get('displayName')?.hasError('minlength')) {
+                        <mat-error>
+                          Display name must be at least 3 characters
+                        </mat-error>
+                      }
                     </mat-form-field>
 
                     <mat-form-field appearance="outline">
                       <mat-label>Nickname (Optional)</mat-label>
                       <input matInput formControlName="nickname">
                       <mat-hint>A friendly name for the agent to use</mat-hint>
-                    </mat-form-field>
-
-                    <mat-form-field appearance="outline">
+                    </mat-form-field>                      <mat-form-field appearance="outline">
                       <mat-label>Bio (Optional)</mat-label>
                       <textarea matInput formControlName="bio" rows="3" matTextareaAutosize></textarea>
                       <mat-hint>{{ profileForm.get('bio')?.value?.length || 0 }}/250 characters</mat-hint>
-                      <mat-error *ngIf="profileForm.get('bio')?.hasError('maxlength')">
-                        Bio cannot exceed 250 characters
-                      </mat-error>
-                    </mat-form-field>
-
-                    <button 
+                      @if (profileForm.get('bio')?.hasError('maxlength')) {
+                        <mat-error>
+                          Bio cannot exceed 250 characters
+                        </mat-error>
+                      }
+                    </mat-form-field>                    <button 
                       mat-raised-button 
                       color="primary" 
                       type="submit" 
                       [disabled]="profileForm.invalid || isUpdatingProfile()"
                       class="submit-button">
-                      <mat-icon *ngIf="isUpdatingProfile()">sync</mat-icon>
+                      @if (isUpdatingProfile()) {
+                        <mat-icon>sync</mat-icon>
+                      }
                       <span>{{ isUpdatingProfile() ? 'Updating...' : 'Save Profile' }}</span>
                     </button>
                   </form>
@@ -159,15 +165,15 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                       <mat-label>Interests (Optional)</mat-label>
                       <input matInput formControlName="interests">
                       <mat-hint>Comma-separated interests to help the agent personalize suggestions</mat-hint>
-                    </mat-form-field>
-
-                    <button 
+                    </mat-form-field>                    <button 
                       mat-raised-button 
                       color="accent" 
                       type="submit" 
                       [disabled]="preferencesForm.invalid || isUpdatingPreferences()"
                       class="submit-button">
-                      <mat-icon *ngIf="isUpdatingPreferences()">sync</mat-icon>
+                      @if (isUpdatingPreferences()) {
+                        <mat-icon>sync</mat-icon>
+                      }
                       <span>{{ isUpdatingPreferences() ? 'Updating...' : 'Save Preferences' }}</span>
                     </button>
                   </form>
@@ -179,8 +185,7 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                 <mat-card-content>
                   <div class="security-content">
                     <h3 class="mat-headline-6 form-title">Account Security</h3>
-                    
-                    <!-- Email Verification Status -->
+                      <!-- Email Verification Status -->
                     <mat-card class="verification-card" [ngClass]="currentUser()?.emailConfirmed ? 'verified' : 'pending'">
                       <mat-card-content>
                         <div class="verification-header">
@@ -190,14 +195,17 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                               {{ currentUser()?.emailConfirmed ? 'Your email is verified' : 'Please verify your email address' }}
                             </p>
                           </div>
-                          <button 
-                            *ngIf="!currentUser()?.emailConfirmed && !isResendingVerification()"
-                            mat-button 
-                            color="warn"
-                            (click)="resendVerification()">
-                            Resend Email
-                          </button>
-                          <span *ngIf="isResendingVerification()" class="resending-text">Sending...</span>
+                          @if (!currentUser()?.emailConfirmed && !isResendingVerification()) {
+                            <button 
+                              mat-button
+                              color="warn"
+                              (click)="resendVerification()">
+                              Resend Email
+                            </button>
+                          }
+                          @if (isResendingVerification()) {
+                            <span class="resending-text">Sending...</span>
+                          }
                         </div>
                       </mat-card-content>
                     </mat-card>
@@ -206,37 +214,47 @@ import { MaterialModule } from '../../../shared/modules/material.module'; // Ang
                     <form [formGroup]="passwordForm" (ngSubmit)="changePassword()" class="profile-form">                      <mat-form-field appearance="outline">
                         <mat-label>Current Password</mat-label>
                         <input matInput type="password" formControlName="currentPassword" required>
-                        <mat-error *ngIf="passwordForm.get('currentPassword')?.hasError('required')">
-                          Current password is required
-                        </mat-error>
+                        @if (passwordForm.get('currentPassword')?.hasError('required')) {
+                          <mat-error>
+                            Current password is required
+                          </mat-error>
+                        }
                       </mat-form-field>                      <mat-form-field appearance="outline">
                         <mat-label>New Password</mat-label>
                         <input matInput type="password" formControlName="newPassword" required>
                         <mat-hint>Minimum 8 characters</mat-hint>
-                        <mat-error *ngIf="passwordForm.get('newPassword')?.hasError('required')">
-                          New password is required
-                        </mat-error>
-                        <mat-error *ngIf="passwordForm.get('newPassword')?.hasError('minlength')">
-                          Password must be at least 8 characters long
-                        </mat-error>
+                        @if (passwordForm.get('newPassword')?.hasError('required')) {
+                          <mat-error>
+                            New password is required
+                          </mat-error>
+                        }
+                        @if (passwordForm.get('newPassword')?.hasError('minlength')) {
+                          <mat-error>
+                            Password must be at least 8 characters long
+                          </mat-error>
+                        }
                       </mat-form-field>                      <mat-form-field appearance="outline">
                         <mat-label>Confirm New Password</mat-label>
                         <input matInput type="password" formControlName="confirmNewPassword" required>
-                        <mat-error *ngIf="passwordForm.get('confirmNewPassword')?.hasError('required')">
-                          Please confirm your new password
-                        </mat-error>
-                        <mat-error *ngIf="passwordForm.hasError('passwordMismatch') && passwordForm.get('confirmNewPassword')?.touched">
-                          Passwords do not match
-                        </mat-error>
-                      </mat-form-field>
-
-                      <button 
+                        @if (passwordForm.get('confirmNewPassword')?.hasError('required')) {
+                          <mat-error>
+                            Please confirm your new password
+                          </mat-error>
+                        }
+                        @if (passwordForm.hasError('passwordMismatch') && passwordForm.get('confirmNewPassword')?.touched) {
+                          <mat-error>
+                            Passwords do not match
+                          </mat-error>
+                        }
+                      </mat-form-field>                      <button 
                         mat-raised-button 
                         color="warn" 
                         type="submit" 
                         [disabled]="passwordForm.invalid || isChangingPassword()"
                         class="submit-button">
-                        <mat-icon *ngIf="isChangingPassword()">sync</mat-icon>
+                        @if (isChangingPassword()) {
+                          <mat-icon>sync</mat-icon>
+                        }
                         <span>{{ isChangingPassword() ? 'Updating...' : 'Change Password' }}</span>
                       </button>
                     </form>
