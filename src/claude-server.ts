@@ -272,9 +272,30 @@ FORMATO DE RESPUESTA:
 Fecha actual: ${new Date().toLocaleDateString('es-MX')}
 
 ${conversationContext ? `CONVERSACIÓN PREVIA:\n${conversationContext}\n\n` : ''}MENSAJE ACTUAL:
-Usuario: ${input.message}`;
-
-    try {
+Usuario: ${input.message}`;    try {
+      // Array para rastrear herramientas usadas
+      const toolsUsed: string[] = [];
+      
+      // Override console.log temporalmente para capturar tool executions
+      const originalLog = console.log;
+      console.log = (...args: any[]) => {
+        const message = args.join(' ');
+        
+        // Detectar ejecución de herramientas
+        if (message.includes('🔧 Tool Execution: searchWeb')) {
+          if (!toolsUsed.includes('searchWeb')) {
+            toolsUsed.push('searchWeb');
+          }
+        } else if (message.includes('🔧 Tool Execution: analyzeWeb')) {
+          if (!toolsUsed.includes('analyzeWeb')) {
+            toolsUsed.push('analyzeWeb');
+          }
+        }
+        
+        // Llamar al log original
+        originalLog(...args);
+      };
+      
       const result = await ai.generate({
         model: claude35Sonnet,
         prompt: fullPrompt,
@@ -285,14 +306,18 @@ Usuario: ${input.message}`;
         }
       });
 
+      // Restaurar console.log original
+      console.log = originalLog;
+
       console.log('✅ Chat Flow Completed:', { 
         responseLength: result.text?.length || 0,
-        hasResponse: !!result.text
+        hasResponse: !!result.text,
+        toolsUsed: toolsUsed
       });
 
       return {
         response: result.text || 'Lo siento, no pude generar una respuesta.',
-        toolsUsed: [], // Tool usage info not easily accessible in current Genkit API
+        toolsUsed: toolsUsed,
         timestamp: new Date().toISOString()
       };
 

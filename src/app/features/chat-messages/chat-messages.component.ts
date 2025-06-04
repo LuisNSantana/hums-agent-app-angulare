@@ -43,17 +43,27 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
               Send a message to begin chatting with your AI assistant.
             </p>
           </div>
-        } @else {
-          <div class="messages-list">
+        } @else {          <div class="messages-list">
             @for (message of messages(); track message.id) {
-              @if (message.role === 'system' && message.metadata?.toolStatus === 'pending') {
-                <div class="tool-system-message pending">
-                  <span class="tool-loading-spinner" aria-label="Tool loading"></span>
+              @if (message.role === 'system' && message.metadata?.toolStatus) {
+                <!-- Mensajes de sistema para herramientas -->
+                <div class="tool-system-message" 
+                     [class.pending]="message.metadata?.toolStatus === 'pending'"
+                     [class.success]="message.metadata?.toolStatus === 'success'"
+                     [class.error]="message.metadata?.toolStatus === 'error'">
+                  @if (message.metadata?.toolStatus === 'pending') {
+                    <span class="tool-loading-spinner" aria-label="Tool loading"></span>
+                  } @else if (message.metadata?.toolStatus === 'success') {
+                    <span class="tool-success-icon">✅</span>
+                  } @else if (message.metadata?.toolStatus === 'error') {
+                    <span class="tool-error-icon">❌</span>
+                  }
                   <span class="tool-system-text">
                     {{ message.content }}
                   </span>
                 </div>
               } @else {
+                <!-- Mensajes regulares (user, assistant) -->
                 <app-chat-message 
                   [message]="message"
                   (messageAction)="onMessageAction($event)"
@@ -351,35 +361,52 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
       margin: 0 auto;
       animation: fadeInScale 0.6s ease-out;
       position: relative;
-    }
-
-    .tool-system-message.pending {
+    }    .tool-system-message.pending {
       display: flex;
       align-items: center;
-      gap: 0.75em;
-      background: #23263a;
-      color: #ffe082;
-      border-radius: 8px;
-      padding: 0.75em 1.2em;
-      margin: 0.5em 0 0.5em 2.5em;
-      font-size: 1em;
-      box-shadow: 0 2px 8px 0 #0002;
-      border-left: 4px solid #ffd600;
-      font-family: inherit;
-      font-style: italic;
-      border: 1px solid #ffd600;
-      animation: fadeInScale 0.4s;
+      gap: 8px;
+      background: rgba(255, 193, 7, 0.1);
+      color: #ffa000;
+      border-radius: 16px;
+      padding: 8px 12px;
+      margin: 4px 0 4px 2.5em;
+      font-size: 12px;
+      font-weight: 500;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+      border-left: 3px solid #ffd600;
+      border: 1px solid rgba(255, 193, 7, 0.3);
+      animation: fadeInScale 0.3s ease-out;
+      width: fit-content;
     }
 
-    .tool-loading-spinner {
-      width: 18px;
-      height: 18px;
-      border: 3px solid #ffe082;
-      border-top: 3px solid #ffd600;
+    .tool-system-message.success {
+      background: #1b2e1b;
+      color: #81c784;
+      border-left: 4px solid #4caf50;
+      border: 1px solid #4caf50;
+    }
+
+    .tool-system-message.error {
+      background: #2e1b1b;
+      color: #e57373;
+      border-left: 4px solid #f44336;
+      border: 1px solid #f44336;
+    }    .tool-loading-spinner {
+      width: 14px;
+      height: 14px;
+      border: 2px solid rgba(255, 193, 7, 0.3);
+      border-top: 2px solid #ffd600;
       border-radius: 50%;
       display: inline-block;
-      margin-right: 0.5em;
+      margin-right: 6px;
       animation: spin 1s linear infinite;
+    }
+
+    .tool-success-icon,
+    .tool-error-icon {
+      font-size: 18px;
+      margin-right: 0.5em;
+      display: inline-block;
     }
 
     @keyframes spin {

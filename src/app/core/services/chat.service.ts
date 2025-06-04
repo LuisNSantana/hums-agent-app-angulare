@@ -82,16 +82,17 @@ export class ChatService {
     } catch (error) {
       console.error('[ChatService] ❌ Error al inicializar el servicio:', error);
     }
-  }
-  /**
+  }  /**
    * Sends a message and handles streaming response
-   */  async sendMessage(request: ChatRequest): Promise<void> {
+   */  
+  async sendMessage(request: ChatRequest): Promise<void> {
     try {
       this._isProcessing.set(true);
       console.log('[ChatService] Enviando mensaje:', request);
       console.log('[ChatService] Model recibido:', request.model);
       console.log('[ChatService] Tipo del model:', typeof request.model);
-        // Add user message immediately (including attachments in metadata)
+      
+      // Add user message immediately (including attachments in metadata)
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),
         content: request.message,
@@ -105,29 +106,16 @@ export class ChatService {
       
       await this.addMessage(userMessage);
       
-      // Create assistant message placeholder
-      const assistantMessage: ChatMessage = {
-        id: crypto.randomUUID(),
-        content: '',
-        role: 'assistant',
-        timestamp: new Date(),
-        conversationId: request.conversationId,
-        isStreaming: true
-      };
-      
-      // Add placeholder to UI first (don't save to DB yet since it's empty)
-      const currentMessages = this._messages();
-      this._messages.set([...currentMessages, assistantMessage]);
-      
-      // Start streaming
-      await this.streamChatResponse(request, assistantMessage.id);
+      // NO crear mensaje del asistente aquí - será creado después de las herramientas
+      // Start streaming directly - the assistant message will be created internally
+      await this.streamChatResponse(request);
       
     } catch (error) {
       this.handleError(error as Error);
     } finally {
       this._isProcessing.set(false);
     }
-  }  /**
+  }/**
    * Get the system prompt for the AI agent
    * Uses custom prompt from conversation settings or falls back to active system prompt
    */
@@ -146,11 +134,12 @@ export class ChatService {
 
     // Use the active system prompt from SystemPromptsService, passing the user's name
     return this.systemPromptsService.generateSystemPrompt({ userName: userName });
-  }
-  /**
+  }  /**
    * Handles chat response via Claude 3.5 Sonnet server
    */
-  private async streamChatResponse(request: ChatRequest, messageId: string): Promise<void> {
+  private async streamChatResponse(request: ChatRequest): Promise<void> {
+    let assistantMessageId: string | null = null;
+    
     try {
       // Get current conversation for settings
       const currentConversation = this._currentConversation();
@@ -170,6 +159,7 @@ export class ChatService {
 
       console.log('[ChatService] Enviando a Claude Server:', claudeRequest);
 
+      // Call Claude server FIRST to get tools information
       const response = await fetch('http://localhost:3001/chatFlow', {
         method: 'POST',
         headers: {
@@ -188,31 +178,85 @@ export class ChatService {
         throw new ChatError(result.error, 'CLAUDE_ERROR');
       }
 
-      // Claude server returns complete response, simulate streaming for UI
       const fullResponse = result.response || '';
+      const toolsUsed = Array.isArray(result.toolsUsed) ? result.toolsUsed : [];      // FIRST: Show tool execution messages if any tools were used
+      if (toolsUsed.length > 0) {
+        console.log('[ChatService] Herramientas detectadas:', toolsUsed);
+        
+        for (const tool of toolsUsed) {
+          // Crear mensaje de herramienta pendiente
+          const toolMsgId = this.addToolSystemMessage(request.conversationId, tool, 'pending');
+          
+          // Simular tiempo de ejecución de la herramienta
+          await new Promise(resolve => setTimeout(resolve, 800));
+          
+          // Marcar como exitosa y remover el mensaje (no duplicar)
+          this.removeToolSystemMessage(toolMsgId);
+          
+          // Pequeño delay antes de la siguiente herramienta
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        // Delay adicional antes de mostrar la respuesta del asistente
+        await new Promise(resolve => setTimeout(resolve, 300));
+      }
+
+      // SECOND: Create assistant message AFTER tools have been shown
+      const assistantMessage: ChatMessage = {
+        id: crypto.randomUUID(),
+        content: '',
+        role: 'assistant',
+        timestamp: new Date(),
+        conversationId: request.conversationId,
+        isStreaming: true
+      };
+      
+      // Add assistant message to UI
+      const currentMessages = this._messages();
+      this._messages.set([...currentMessages, assistantMessage]);
+      assistantMessageId = assistantMessage.id;
+
+      // THIRD: Stream the assistant response with typing effect
       const words = fullResponse.split(' ');
       let accumulatedContent = '';
-      // Guardar herramientas usadas si existen
-      const toolsUsed = Array.isArray(result.toolsUsed) ? result.toolsUsed : [];
 
-      // Simulate streaming by adding words progressively
       for (let i = 0; i < words.length; i++) {
         const word = words[i];
         accumulatedContent += (i > 0 ? ' ' : '') + word;
-        this.updateStreamingMessage(messageId, accumulatedContent);
+        
         const streamChunk: StreamChunk = {
           delta: (i > 0 ? ' ' : '') + word,
           finish_reason: i === words.length - 1 ? 'stop' : null
         };
+        
+        this.updateStreamingMessage(assistantMessageId, accumulatedContent);
         this.streamSubject.next(streamChunk);
         await new Promise(resolve => setTimeout(resolve, 50));
       }
+      
       // Al finalizar, guardar toolsUsed en el metadata
-      this.addToolsUsedToMessage(messageId, toolsUsed);
-      await this.finalizeStreamingMessage(messageId);
+      this.addToolsUsedToMessage(assistantMessageId, toolsUsed);
+      await this.finalizeStreamingMessage(assistantMessageId);
 
     } catch (error) {
-      this.handleStreamError(error as Error, messageId);
+      // Si hay error en el mensaje del asistente, manejarlo
+      if (assistantMessageId) {
+        this.handleStreamError(error as Error, assistantMessageId);
+      } else {
+        // Si no se creó mensaje del asistente, crear uno con error
+        const errorMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          content: 'Sorry, I encountered an error while processing your request.',
+          role: 'assistant',
+          timestamp: new Date(),
+          conversationId: request.conversationId,
+          isError: true
+        };
+        
+        const currentMessages = this._messages();
+        this._messages.set([...currentMessages, errorMessage]);
+        this.handleError(error as Error);
+      }
     }
   }
   /**
@@ -803,25 +847,53 @@ export class ChatService {
       };
       this._messages.set(updatedMessages);
     }
-  }
-
-  /**
+  }  /**
    * Devuelve un label amigable para la herramienta usada
    */
   private toolBadgeLabel(tool: string): string {
     switch (tool) {
+      case 'AI Agent':
+        return 'Agente IA';
       case 'searchWeb':
-        return 'Web Search';
+      case 'braveSearch':
+      case 'web_search':
+        return 'Búsqueda Web';
       case 'analyzeWeb':
-        return 'Analyze Web';
+      case 'web_analyze':
+        return 'Análisis Web';
       case 'googleCalendar':
+      case 'google_calendar':
         return 'Google Calendar';
       case 'googleDrive':
+      case 'google_drive':
         return 'Google Drive';
       case 'analyzeDocument':
-        return 'Document Analyzer';
+      case 'document_analyzer':
+        return 'Analizador de Documentos';
+      case 'perplexity':
+      case 'perplexitySearch':
+        return 'Perplexity Search';
+      case 'tavily':
+      case 'tavilySearch':
+        return 'Tavily Search';
+      case 'fetch':
+      case 'fetchUrl':
+        return 'Obtener URL';
+      case 'duckduckgo':
+      case 'duckduckgoSearch':
+        return 'DuckDuckGo Search';
       default:
-        return tool;
+        // Si no encontramos un mapeo específico, formatear el nombre
+        return tool.charAt(0).toUpperCase() + tool.slice(1).replace(/([A-Z])/g, ' $1');
     }
+  }
+
+  /**
+   * Remueve un mensaje de sistema de herramienta
+   */
+  private removeToolSystemMessage(messageId: string): void {
+    const currentMessages = this._messages();
+    const filteredMessages = currentMessages.filter(m => m.id !== messageId);
+    this._messages.set(filteredMessages);
   }
 }

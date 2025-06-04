@@ -734,11 +734,38 @@ import { AuthService } from '../../core/services/auth/auth.service';
     }
     :host ::ng-deep .tool-system-message.success {
       color: #a5d6a7;
-      border-left-color: #66bb6a;
-    }
+      border-left-color: #66bb6a;    }
     :host ::ng-deep .tool-system-message.error {
       color: #ef9a9a;
       border-left-color: #e53935;
+    }
+
+    /* Tool Badge Styles */
+    .tool-badge-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-top: 8px;
+    }
+
+    .tool-badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      background: rgba(99, 102, 241, 0.1);
+      color: var(--mat-app-primary);
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 500;
+      border: 1px solid rgba(99, 102, 241, 0.2);
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      transition: all 0.2s ease;
+    }
+
+    .tool-badge:hover {
+      background: rgba(99, 102, 241, 0.15);
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     }
   `]
 })
