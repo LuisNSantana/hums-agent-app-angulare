@@ -68,6 +68,16 @@ import { ChatService } from '../../core/services/chat.service';
               <div class="attachment-item">
                 @if (attachment.type === 'image') {
                   <img [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
+                } @else if (attachment.type === 'document') {
+                  <div class="document-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                      <polyline points="14,2 14,8 20,8"/>
+                      <line x1="16" y1="13" x2="8" y2="13"/>
+                      <line x1="16" y1="17" x2="8" y2="17"/>
+                      <line x1="10" y1="9" x2="8" y2="9"/>
+                    </svg>
+                  </div>
                 }
                 <div class="attachment-info">
                   <span class="attachment-name">{{ attachment.name }}</span>
@@ -81,7 +91,7 @@ import { ChatService } from '../../core/services/chat.service';
               </div>
             }
           </div>
-        }        <!-- Suggestions (when input is empty) -->
+        }<!-- Suggestions (when input is empty) -->
         @if (showSuggestions() && suggestions().length > 0 && !message()) {
           <div class="suggestions">
             <h4>Suggestions:</h4>
@@ -392,15 +402,31 @@ import { ChatService } from '../../core/services/chat.service';
     .attachment-item:hover {
       transform: translateY(-1px);
       box-shadow: var(--mat-app-shadow-sm);
-    }
-
-    .attachment-image {
+    }    .attachment-image {
       width: 48px;
       height: 48px;
       object-fit: cover;
       border-radius: 6px;
       border: 1px solid var(--mat-app-border);
       box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .document-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--mat-app-primary);
+      color: var(--mat-app-on-primary);
+      border-radius: 6px;
+      border: 1px solid var(--mat-app-border);
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .document-icon svg {
+      width: 24px;
+      height: 24px;
     }
 
     .attachment-info {
@@ -780,8 +806,7 @@ export class ChatInputComponent {
         if (file) this.handleImageAttachment(file);
       }
     }
-  }
-  /**
+  }  /**
    * Send message (with optional attachments for multimodal)
    */
   onSend(): void {
@@ -791,8 +816,20 @@ export class ChatInputComponent {
     if ((msg || attachments.length > 0) && this.canSend()) {
       // If we have attachments, emit them too
       if (attachments.length > 0) {
-        // For multimodal messages, we'll modify the interface to handle this
-        this.messageSent.emit(msg || 'Analyze this image:');
+        // For multimodal messages, create appropriate default message based on attachment type
+        let defaultMessage = '';
+        const hasImages = attachments.some(a => a.type === 'image');
+        const hasDocuments = attachments.some(a => a.type === 'document');
+        
+        if (hasDocuments && hasImages) {
+          defaultMessage = 'Analyze these files:';
+        } else if (hasDocuments) {
+          defaultMessage = 'Analyze this document:';
+        } else if (hasImages) {
+          defaultMessage = 'Analyze this image:';
+        }
+        
+        this.messageSent.emit(msg || defaultMessage);
         // Emit attachments separately for now
         attachments.forEach(attachment => {
           this.attachmentAdded.emit(attachment);
@@ -846,14 +883,13 @@ export class ChatInputComponent {
   onModelChange(event: Event): void {
     const target = event.target as HTMLSelectElement;
     this.modelChanged.emit(target.value);
-  }
-  /**
+  }  /**
    * Handle file attachment (supports both documents and images for multimodal)
    */
   onAttachFile(): void {
     const input = document.createElement('input');
     input.type = 'file';
-    // Extended to support images for multimodal capabilities with Gemma 3
+    // Extended to support images for multimodal capabilities with Gemma 3 and PDFs for document analysis
     input.accept = '.txt,.md,.pdf,.doc,.docx,.json,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp';
     input.multiple = false; // For now, single file only
     
@@ -863,16 +899,18 @@ export class ChatInputComponent {
         // Check if it's an image for multimodal support
         if (file.type.startsWith('image/')) {
           await this.handleImageAttachment(file);
+        } else if (file.type === 'application/pdf') {
+          // Handle PDF files for document analysis
+          await this.handleDocumentAttachment(file);
         } else {
-          // Handle regular document files as before
+          // Handle other document files as before
           this.fileAttached.emit(file);
         }
       }
     };
     
     input.click();
-  }
-  /**
+  }  /**
    * Handle image attachment for multimodal AI analysis
    */
   private async handleImageAttachment(file: File): Promise<void> {
@@ -904,6 +942,39 @@ export class ChatInputComponent {
       
     } catch (error) {
       console.error('[ChatInput] ❌ Error procesando imagen:', error);
+      // TODO: Show error message to user
+    }
+  }
+
+  /**
+   * Handle PDF document attachment for AI document analysis
+   */
+  private async handleDocumentAttachment(file: File): Promise<void> {
+    try {
+      // Convert PDF to base64 for document analysis
+      const base64 = await this.fileToBase64(file);
+      
+      // Create document attachment object
+      const attachment: ChatAttachment = {
+        id: crypto.randomUUID(),
+        name: file.name,
+        type: 'document' as const,
+        size: file.size,
+        mimeType: file.type,
+        base64: base64,
+        url: URL.createObjectURL(file) // For preview/download
+      };
+
+      // Add to current attachments
+      this.currentAttachments.update(attachments => [...attachments, attachment]);
+      
+      // Focus input for user to add text description or questions about the document
+      this.focusInput();
+      
+      console.log('[ChatInput] ✅ PDF documento adjuntado:', file.name, this.formatFileSize(file.size));
+      
+    } catch (error) {
+      console.error('[ChatInput] ❌ Error procesando documento PDF:', error);
       // TODO: Show error message to user
     }
   }

@@ -143,8 +143,7 @@ export class ChatService {
     try {
       // Get current conversation for settings
       const currentConversation = this._currentConversation();
-      
-      // Build conversation history for Claude
+        // Build conversation history for Claude
       const conversationHistory = this._messages()
         .filter(m => m.conversationId === request.conversationId && !m.isStreaming)
         .map(m => ({
@@ -152,9 +151,27 @@ export class ChatService {
           content: m.content
         }));
 
+      // Prepare documents for analysis if any PDF attachments are present
+      let documentsForAnalysis: any[] = [];
+      if (request.attachments && request.attachments.length > 0) {
+        documentsForAnalysis = request.attachments
+          .filter(attachment => attachment.type === 'document' && 
+                              attachment.mimeType === 'application/pdf' && 
+                              attachment.base64)
+          .map(attachment => ({
+            file: attachment.base64,
+            fileName: attachment.name,
+            mimeType: attachment.mimeType,
+            analysisType: 'analyze', // Default to comprehensive analysis
+            maxLength: 10000,
+            includeMetadata: true
+          }));
+      }
+
       const claudeRequest = {
         message: request.message,
-        conversationHistory: conversationHistory
+        conversationHistory: conversationHistory,
+        documents: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined
       };
 
       console.log('[ChatService] Enviando a Claude Server:', claudeRequest);

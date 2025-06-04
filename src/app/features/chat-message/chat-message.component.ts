@@ -82,17 +82,30 @@ import { AuthService } from '../../core/services/auth/auth.service';
               </svg>
               {{ message().content }}
             </div>
-          } @else {            <!-- Attached Images (for user messages) -->
+          } @else {            <!-- Attached Files (for user messages) -->
             @if (attachments().length > 0) {
               <div class="message-attachments">
                 @for (attachment of attachments(); track attachment.id) {
-                  <div class="attachment-image">
+                  <div class="attachment-container" [class.document-attachment]="attachment.type === 'document'">
                     @if (attachment.type === 'image' && attachment.url) {
                       <img 
                         [src]="attachment.url"
                         [alt]="attachment.name"
                         class="attached-image"
                         loading="lazy" />
+                    } @else if (attachment.type === 'document') {
+                      <div class="document-preview">
+                        <div class="document-icon">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14,2 14,8 20,8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                            <line x1="16" y1="17" x2="8" y2="17"/>
+                            <line x1="10" y1="9" x2="8" y2="9"/>
+                          </svg>
+                        </div>
+                        <span class="document-type">PDF</span>
+                      </div>
                     }
                     <div class="attachment-info">
                       <span class="attachment-name">{{ attachment.name }}</span>
@@ -498,9 +511,7 @@ import { AuthService } from '../../core/services/auth/auth.service';
       font-size: 13px;
       color: var(--mat-app-on-surface);
       box-shadow: var(--mat-app-shadow-sm);
-    }
-
-    /* Multimodal Image Attachment Styles */
+    }    /* Multimodal Attachment Styles */
     .message-attachments {
       display: flex;
       flex-direction: column;
@@ -509,7 +520,7 @@ import { AuthService } from '../../core/services/auth/auth.service';
       width: 100%;
     }
 
-    .attachment-image {
+    .attachment-container {
       display: flex;
       flex-direction: column;
       gap: 8px;
@@ -522,10 +533,14 @@ import { AuthService } from '../../core/services/auth/auth.service';
       box-shadow: var(--mat-app-shadow-sm);
     }
 
-    .attachment-image:hover {
+    .attachment-container:hover {
       transform: translateY(-2px);
       box-shadow: var(--mat-app-shadow-md);
       border-color: var(--mat-app-primary);
+    }
+
+    .attachment-container.document-attachment {
+      max-width: 280px;
     }
 
     .attached-image {
@@ -536,6 +551,49 @@ import { AuthService } from '../../core/services/auth/auth.service';
       object-fit: cover;
       border-radius: 8px;
       border: 1px solid var(--mat-app-border-variant);
+      cursor: pointer;
+      transition: all 0.3s ease;
+    }
+
+    .document-preview {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px;
+      background: var(--mat-app-surface-elevated);
+      border: 1px solid var(--mat-app-border-variant);
+      border-radius: 8px;
+      min-height: 80px;
+    }
+
+    .document-icon {
+      width: 48px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--mat-app-primary);
+      color: var(--mat-app-on-primary);
+      border-radius: 8px;
+      flex-shrink: 0;
+    }
+
+    .document-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .document-type {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--mat-app-on-primary);
+      background: var(--mat-app-primary);
+      padding: 2px 6px;
+      border-radius: 4px;
+      position: absolute;
+      bottom: 4px;
+      right: 4px;
+    }
       cursor: pointer;
       transition: all 0.3s ease;
     }
