@@ -44,14 +44,24 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
             </p>
           </div>
         } @else {
-          <div class="messages-list">            @for (message of messages(); track message.id) {
-              <app-chat-message 
-                [message]="message"
-                (messageAction)="onMessageAction($event)"
-              />
+          <div class="messages-list">
+            @for (message of messages(); track message.id) {
+              @if (message.role === 'system' && message.metadata?.toolStatus === 'pending') {
+                <div class="tool-system-message pending">
+                  <span class="tool-loading-spinner" aria-label="Tool loading"></span>
+                  <span class="tool-system-text">
+                    {{ message.content }}
+                  </span>
+                </div>
+              } @else {
+                <app-chat-message 
+                  [message]="message"
+                  (messageAction)="onMessageAction($event)"
+                />
+              }
             }
             
-            @if (isLoading() && !hasStreamingMessage()) {
+            @if (isLoading() && !hasStreamingMessage() && !hasPendingToolSystemMessage()) {
               <div class="typing-indicator">
                 <div class="message-avatar assistant">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -328,6 +338,54 @@ import { ChatMessageComponent } from '../chat-message/chat-message.component';
         padding: 24px 16px;
       }
     }
+
+    .tool-system-message {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: var(--mat-app-surface-container-high);
+      border: 1px solid var(--mat-app-border);
+      border-radius: 20px;
+      width: fit-content;
+      margin: 0 auto;
+      animation: fadeInScale 0.6s ease-out;
+      position: relative;
+    }
+
+    .tool-system-message.pending {
+      display: flex;
+      align-items: center;
+      gap: 0.75em;
+      background: #23263a;
+      color: #ffe082;
+      border-radius: 8px;
+      padding: 0.75em 1.2em;
+      margin: 0.5em 0 0.5em 2.5em;
+      font-size: 1em;
+      box-shadow: 0 2px 8px 0 #0002;
+      border-left: 4px solid #ffd600;
+      font-family: inherit;
+      font-style: italic;
+      border: 1px solid #ffd600;
+      animation: fadeInScale 0.4s;
+    }
+
+    .tool-loading-spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid #ffe082;
+      border-top: 3px solid #ffd600;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 0.5em;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
   `]
 })
 export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
@@ -347,6 +405,10 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
   // Computed properties
   readonly hasStreamingMessage = computed(() => 
     this.messages().some(m => m.isStreaming)
+  );
+
+  readonly hasPendingToolSystemMessage = computed(() =>
+    this.messages().some(m => m.role === 'system' && m.metadata?.toolStatus === 'pending')
   );
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -370,5 +432,38 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
       const container = this.messagesContainer.nativeElement;
       container.scrollTop = container.scrollHeight;
     }
+  }
+
+  /**
+   * Devuelve true si el mensaje en streaming del agente tiene toolsUsed
+   */
+  hasAssistantToolLoading(): boolean {
+    const streamingMsg = this.messages().find(m => m.role === 'assistant' && m.isStreaming);
+    return !!(streamingMsg && streamingMsg.metadata?.toolsUsed?.length);
+  }
+
+  /**
+   * Devuelve el texto de loading según la herramienta usada
+   */
+  toolLoadingText(): string {
+    const streamingMsg = this.messages().find(m => m.role === 'assistant' && m.isStreaming);
+    if (streamingMsg && streamingMsg.metadata?.toolsUsed?.length) {
+      const tool = streamingMsg.metadata.toolsUsed[0];
+      switch (tool) {
+        case 'searchWeb':
+          return 'Buscando en la web...';
+        case 'analyzeWeb':
+          return 'Analizando información web...';
+        case 'googleCalendar':
+          return 'Accediendo a Google Calendar...';
+        case 'googleDrive':
+          return 'Accediendo a Google Drive...';
+        case 'analyzeDocument':
+          return 'Analizando documento...';
+        default:
+          return `Ejecutando herramienta: ${tool}`;
+      }
+    }
+    return 'Agent Hums is thinking...';
   }
 }

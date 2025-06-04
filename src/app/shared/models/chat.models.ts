@@ -21,6 +21,9 @@ export interface ChatMessageMetadata {
   sources?: string[];
   thoughts?: string; // Internal agent reasoning (optional)
   attachments?: ChatAttachment[]; // File/image attachments
+  toolsUsed?: string[]; // Herramientas usadas por el agente
+  tool?: string; // Herramienta en ejecución
+  toolStatus?: 'pending' | 'success' | 'error'; // Estado de la herramienta
 }
 
 export interface ChatAttachment {

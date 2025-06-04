@@ -170,6 +170,15 @@ import { AuthService } from '../../core/services/auth/auth.service';
             }
           </div>
         }
+
+        <!-- Tool Used Badge -->
+        @if (message().metadata?.toolsUsed?.length && message().role === 'assistant') {
+          <div class="tool-badge-list">
+            @for (tool of message().metadata?.toolsUsed; track tool) {
+              <span class="tool-badge">{{ toolBadgeLabel(tool) }}</span>
+            }
+          </div>
+        }
       </div>
     </div>
   `,  styles: [`
@@ -655,6 +664,82 @@ import { AuthService } from '../../core/services/auth/auth.service';
         height: 32px;
       }
     }
+
+    /* Tool System Message Styles */
+    .tool-system-message {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px;
+      border-radius: 12px;
+      margin: 8px 0;
+      font-size: 14px;
+      color: var(--mat-app-on-surface);
+      background: var(--mat-app-surface-variant);
+      border: 1px solid var(--mat-app-border);
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+
+    .tool-system-message.success {
+      background: rgba(76, 175, 80, 0.1);
+      border-color: rgba(76, 175, 80, 0.3);
+    }
+
+    .tool-system-message.error {
+      background: rgba(239, 68, 68, 0.1);
+      border-color: rgba(239, 68, 68, 0.3);
+    }
+
+    .tool-system-message.pending {
+      background: rgba(255, 193, 7, 0.1);
+      border-color: rgba(255, 193, 7, 0.3);
+    }
+
+    .tool-loading-spinner {
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    /* SCSS for tool-system-message */
+    :host ::ng-deep .tool-system-message {
+      background: #23263a;
+      color: #ffe082;
+      border-radius: 8px;
+      padding: 0.75em 1.2em;
+      margin: 0.5em 0 0.5em 2.5em;
+      font-size: 1em;
+      display: flex;
+      align-items: center;
+      gap: 0.5em;
+      box-shadow: 0 2px 8px 0 #0002;
+      border-left: 4px solid #ffd600;
+      font-family: inherit;
+    }
+    :host ::ng-deep .tool-system-message.pending .tool-system-text {
+      font-style: italic;
+      color: #ffd600;
+    }
+    :host ::ng-deep .tool-system-message .tool-loading-spinner {
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 0.5em;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+    :host ::ng-deep .tool-system-message.success {
+      color: #a5d6a7;
+      border-left-color: #66bb6a;
+    }
+    :host ::ng-deep .tool-system-message.error {
+      color: #ef9a9a;
+      border-left-color: #e53935;
+    }
   `]
 })
 export class ChatMessageComponent {
@@ -780,5 +865,25 @@ export class ChatMessageComponent {
 
   trackByAttachment(index: number, attachment: any): string {
     return attachment.id;
+  }
+
+  /**
+   * Devuelve un label amigable para la herramienta usada
+   */
+  toolBadgeLabel(tool: string): string {
+    switch (tool) {
+      case 'searchWeb':
+        return '🔎 Web Search';
+      case 'analyzeWeb':
+        return '📊 Analyze Web';
+      case 'googleCalendar':
+        return '📅 Google Calendar';
+      case 'googleDrive':
+        return '📁 Google Drive';
+      case 'analyzeDocument':
+        return '📄 Document Analyzer';
+      default:
+        return `🛠️ ${tool}`;
+    }
   }
 }

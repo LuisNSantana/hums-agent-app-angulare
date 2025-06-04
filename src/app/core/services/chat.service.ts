@@ -4,6 +4,7 @@
  */
 
 import { Injectable, signal, inject } from '@angular/core';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Observable, BehaviorSubject, Subject } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
 import { 
@@ -25,10 +26,14 @@ import { SystemPromptsService } from './prompts/system-prompts.service';
   providedIn: 'root'
 })
 export class ChatService {
-    // Inject Supabase service
+  // 🌐 API Configuration for Claude Server
+  private readonly API_BASE_URL = 'http://localhost:3001';
+  
+  // Inject services
+  private readonly http = inject(HttpClient);
   private readonly supabaseService = inject(SupabaseService);
   private readonly authService = inject(AuthService);
-  private readonly authStateService = inject(AuthStateService); // Inject AuthStateService
+  private readonly authStateService = inject(AuthStateService);
   private readonly systemPromptsService = inject(SystemPromptsService);
   
   // Reactive state with signals (Angular 20+)
@@ -142,121 +147,68 @@ export class ChatService {
     // Use the active system prompt from SystemPromptsService, passing the user's name
     return this.systemPromptsService.generateSystemPrompt({ userName: userName });
   }
-
   /**
-   * Handles streaming chat response via Ollama API
+   * Handles chat response via Claude 3.5 Sonnet server
    */
   private async streamChatResponse(request: ChatRequest, messageId: string): Promise<void> {
-    try {      // Get current conversation for settings
+    try {
+      // Get current conversation for settings
       const currentConversation = this._currentConversation();
       
-      // Build conversation history for Ollama
-      const messages: Array<{role: string, content: string}> = [];
-      
-      // Add system prompt as the first message
-      messages.push({
-        role: 'system',
-        content: this.getSystemPrompt(currentConversation?.settings)
-      });
-
-      // Add conversation history
-      const conversationMessages = this._messages()
+      // Build conversation history for Claude
+      const conversationHistory = this._messages()
         .filter(m => m.conversationId === request.conversationId && !m.isStreaming)
         .map(m => ({
           role: m.role === 'user' ? 'user' : 'assistant',
           content: m.content
         }));
-      
-      messages.push(...conversationMessages);      // Add the current user message (with potential image attachments)
-      const userMessage: any = {
-        role: 'user',
-        content: request.message
+
+      const claudeRequest = {
+        message: request.message,
+        conversationHistory: conversationHistory
       };
 
-      // Add images for multimodal support if available
-      if (request.attachments && request.attachments.length > 0) {
-        // Filter for image attachments only
-        const imageAttachments = request.attachments.filter(att => att.type === 'image');
-        
-        if (imageAttachments.length > 0) {
-          userMessage.images = imageAttachments
-            .map(att => att.base64)
-            .filter(base64 => base64); // Remove any null/undefined base64 values
-          
-          console.log('[ChatService] Adding', imageAttachments.length, 'image(s) to multimodal request');
-        }
-      }
+      console.log('[ChatService] Enviando a Claude Server:', claudeRequest);
 
-      messages.push(userMessage);      const ollamaRequest = {
-        model: request.model || 'deepseek-r1:7b',
-        messages: messages,
-        stream: true,
-        options: {
-          temperature: 0.7,
-          top_p: 0.9,
-          max_tokens: 4096
-        }
-      };
-
-      console.log('[ChatService] Enviando a Ollama:', ollamaRequest);
-      console.log('[ChatService] Modelo final:', ollamaRequest.model);
-
-      const response = await fetch('http://localhost:11434/api/chat', {
+      const response = await fetch('http://localhost:3001/chatFlow', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(ollamaRequest)
+        body: JSON.stringify(claudeRequest)
       });
 
       if (!response.ok) {
-        throw new ChatError('Failed to get response from Ollama', 'STREAM_ERROR', response.status);
+        throw new ChatError('Failed to get response from Claude Server', 'STREAM_ERROR', response.status);
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new ChatError('No response stream available', 'NO_STREAM');
+      const result = await response.json();
+      
+      if (result.error) {
+        throw new ChatError(result.error, 'CLAUDE_ERROR');
       }
 
-      const decoder = new TextDecoder();
+      // Claude server returns complete response, simulate streaming for UI
+      const fullResponse = result.response || '';
+      const words = fullResponse.split(' ');
       let accumulatedContent = '';
+      // Guardar herramientas usadas si existen
+      const toolsUsed = Array.isArray(result.toolsUsed) ? result.toolsUsed : [];
 
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) break;
-        
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n').filter(line => line.trim());
-
-        for (const line of lines) {
-          try {
-            const parsed = JSON.parse(line);
-            
-            if (parsed.message && parsed.message.content) {
-              const deltaContent = parsed.message.content;
-              accumulatedContent += deltaContent;
-              
-              // Update the message with accumulated content
-              this.updateStreamingMessage(messageId, accumulatedContent);
-              
-              // Emit stream chunk
-              const streamChunk: StreamChunk = {
-                delta: deltaContent,
-                finish_reason: parsed.done ? 'stop' : null
-              };
-              this.streamSubject.next(streamChunk);
-            }
-
-            if (parsed.done) {
-              break;
-            }
-          } catch (parseError) {
-            console.warn('Failed to parse Ollama chunk:', line);
-          }
-        }      }
-
-      // Mark message as completed
+      // Simulate streaming by adding words progressively
+      for (let i = 0; i < words.length; i++) {
+        const word = words[i];
+        accumulatedContent += (i > 0 ? ' ' : '') + word;
+        this.updateStreamingMessage(messageId, accumulatedContent);
+        const streamChunk: StreamChunk = {
+          delta: (i > 0 ? ' ' : '') + word,
+          finish_reason: i === words.length - 1 ? 'stop' : null
+        };
+        this.streamSubject.next(streamChunk);
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      // Al finalizar, guardar toolsUsed en el metadata
+      this.addToolsUsedToMessage(messageId, toolsUsed);
       await this.finalizeStreamingMessage(messageId);
 
     } catch (error) {
@@ -534,7 +486,7 @@ export class ChatService {
       // Could implement retry logic or show error to user
     }
   }  /**
-   * Loads available AI models from Supabase and Ollama
+   * Loads available AI models - Now using Claude 3.5 Sonnet
    */
   private async loadAvailableModels(): Promise<void> {
     console.log('[ChatService] 🔄 Loading available models...');
@@ -547,59 +499,74 @@ export class ChatService {
       dbModels.forEach(model => {
         console.log(`  - ${model.name} (${model.id}) [${model.provider}] - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
       });
-      
-      // Try to get live models from Ollama to update availability
-      console.log('[ChatService] 🚀 Checking Ollama availability...');
+
+      // Check Claude server availability
+      console.log('[ChatService] 🤖 Checking Claude Server availability...');
       try {
-        const response = await fetch('http://localhost:11434/api/tags');
+        const response = await fetch('http://localhost:3001/health');
         if (response.ok) {
           const data = await response.json();
-          const ollamaModelNames = data.models.map((model: any) => model.name);
-          console.log('[ChatService] 🚀 Ollama models available:', ollamaModelNames);
+          console.log('[ChatService] 🤖 Claude Server is available:', data);
           
-          // Update availability based on what's actually running in Ollama
-          const updatedModels = dbModels.map(model => ({
-            ...model,
-            isAvailable: model.provider === 'local' ? 
-              ollamaModelNames.includes(model.id) : 
-              model.isAvailable
-          }));
+          // Create Claude model if not in database
+          let claudeModels = dbModels.filter(model => model.provider === 'anthropic');
           
-          console.log('[ChatService] ✅ Models updated with Ollama availability:');
+          if (claudeModels.length === 0) {
+            console.log('[ChatService] 🔄 Adding Claude model to available models');
+            claudeModels = [{
+              id: 'claude-3-5-sonnet-20241022',
+              name: 'Claude 3.5 Sonnet',
+              provider: 'anthropic',
+              description: 'Advanced reasoning with web search capabilities',
+              contextWindow: 200000,
+              isAvailable: true,
+              configuration: { is_default: true }
+            }];
+          }
+          
+          // Update availability for Claude models
+          const updatedModels = [
+            ...dbModels.filter(model => model.provider !== 'anthropic'),
+            ...claudeModels.map(model => ({ ...model, isAvailable: true }))
+          ];
+          
+          console.log('[ChatService] ✅ Models updated with Claude availability:');
           updatedModels.forEach(model => {
             console.log(`  - ${model.name} (${model.id}) - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
           });
           
           this._availableModels.set(updatedModels);
           this.setDefaultModel(updatedModels);
-          console.log('[ChatService] ✅ Models loaded successfully with Ollama sync');
+          console.log('[ChatService] ✅ Models loaded successfully with Claude server');
           return;
         }
-      } catch (ollamaError) {
-        console.warn('[ChatService] ⚠️ Could not connect to Ollama, using database models only:', ollamaError);
+      } catch (claudeError) {
+        console.warn('[ChatService] ⚠️ Could not connect to Claude server, using database models only:', claudeError);
       }
       
-      // Use database models as-is if Ollama is not available
-      console.log('[ChatService] 📊 Using database models without Ollama sync');
+      // Use database models as-is if Claude server is not available
+      console.log('[ChatService] 📊 Using database models without Claude server sync');
       this._availableModels.set(dbModels);
       this.setDefaultModel(dbModels);
       
     } catch (error) {
       console.error('[ChatService] ❌ Failed to load models from database:', error);
       
-      // Fallback to hardcoded models
+      // Fallback to Claude model
       const fallbackModels: AIModel[] = [
         {
-          id: 'deepseek-r1:7b',
-          name: 'DeepSeek R1 7B',
-          provider: 'local',
-          description: 'DeepSeek R1 model running locally via Ollama',
-          contextWindow: 32768,
-          isAvailable: false
+          id: 'claude-3-5-sonnet-20241022',
+          name: 'Claude 3.5 Sonnet',
+          provider: 'anthropic',
+          description: 'Advanced reasoning with web search capabilities',
+          contextWindow: 200000,
+          isAvailable: false,
+          configuration: { is_default: true }
         }
       ];
-      console.log('[ChatService] 🔄 Using fallback models:', fallbackModels);
+      console.log('[ChatService] 🔄 Using fallback Claude model:', fallbackModels);
       this._availableModels.set(fallbackModels);
+      this.setDefaultModel(fallbackModels);
     }
   }
   /**
@@ -774,6 +741,87 @@ export class ChatService {
       console.log('[ChatService] ⚠️ Usando modelo alternativo como predeterminado:', availableModel.name, `(${availableModel.id})`);
     } else {
       console.log('[ChatService] ❌ No hay modelos disponibles para establecer como predeterminado');
+    }
+  }
+
+  /**
+   * Agrega las herramientas usadas al metadata del mensaje
+   */
+  private addToolsUsedToMessage(messageId: string, toolsUsed: string[]): void {
+    const currentMessages = this._messages();
+    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
+    if (messageIndex >= 0) {
+      const updatedMessages = [...currentMessages];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        metadata: {
+          ...updatedMessages[messageIndex].metadata,
+          toolsUsed: toolsUsed
+        }
+      };
+      this._messages.set(updatedMessages);
+    }
+  }
+
+  /**
+   * Inserta un mensaje de sistema para indicar la ejecución de una herramienta
+   */
+  private addToolSystemMessage(conversationId: string, tool: string, status: 'pending' | 'success' | 'error'): string {
+    const id = crypto.randomUUID();
+    const content = status === 'pending'
+      ? `🔎 Ejecutando herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}...`
+      : status === 'success'
+        ? `✅ Herramienta ejecutada: ${this.toolBadgeLabel(tool ?? 'unknown')}`
+        : `❌ Error al ejecutar herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}`;
+    const msg: ChatMessage = {
+      id,
+      content,
+      role: 'system',
+      timestamp: new Date(),
+      conversationId,
+      metadata: { tool, toolStatus: status }
+    };
+    this._messages.set([...this._messages(), msg]);
+    return id;
+  }
+
+  /**
+   * Actualiza el mensaje de sistema de herramienta
+   */
+  private updateToolSystemMessage(messageId: string, status: 'success' | 'error') {
+    const currentMessages = this._messages();
+    const idx = currentMessages.findIndex(m => m.id === messageId);
+    if (idx >= 0) {
+      const tool = currentMessages[idx].metadata?.tool;
+      const updatedMessages = [...currentMessages];
+      updatedMessages[idx] = {
+        ...updatedMessages[idx],
+        content: status === 'success'
+          ? `✅ Herramienta ejecutada: ${this.toolBadgeLabel(tool ?? 'unknown')}`
+          : `❌ Error al ejecutar herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}`,
+        metadata: { ...updatedMessages[idx].metadata, toolStatus: status }
+      };
+      this._messages.set(updatedMessages);
+    }
+  }
+
+  /**
+   * Devuelve un label amigable para la herramienta usada
+   */
+  private toolBadgeLabel(tool: string): string {
+    switch (tool) {
+      case 'searchWeb':
+        return 'Web Search';
+      case 'analyzeWeb':
+        return 'Analyze Web';
+      case 'googleCalendar':
+        return 'Google Calendar';
+      case 'googleDrive':
+        return 'Google Drive';
+      case 'analyzeDocument':
+        return 'Document Analyzer';
+      default:
+        return tool;
     }
   }
 }
