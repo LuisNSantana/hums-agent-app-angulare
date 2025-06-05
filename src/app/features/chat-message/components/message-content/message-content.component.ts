@@ -21,7 +21,7 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
   imports: [CommonModule, MessageAttachmentsComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="message-content">
+    <div class="message-content" [class.user-message]="message().role === 'user'" [class.assistant-message]="message().role === 'assistant'">
       <!-- Message Header -->
       <div class="message-header">
         <span class="message-role">
@@ -46,7 +46,7 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
       }
 
       <!-- Message Body -->
-      <div class="message-body">
+      <div class="message-body" [class.user-bubble]="message().role === 'user'" [class.assistant-bubble]="message().role === 'assistant'">
         @if (message().isError) {
           <div class="error-content">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -144,12 +144,10 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
   `,
   styles: [`
     .message-content {
-      flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 8px;
-      min-width: 0;
-      max-width: calc(100% - 56px);
+      width: 100%;
+      max-width: 80%;
     }
 
     .message-header {
@@ -188,6 +186,39 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
       font-size: 15px;
       transition: all 0.3s ease;
       border-radius: 20px;
+      box-shadow: var(--mat-app-shadow-sm);
+    }
+    
+    /* Estilos para burbujas de mensaje */
+    .user-bubble {
+      background: var(--mat-app-primary);
+      color: white;
+      border: none;
+      border-bottom-right-radius: 4px;
+      align-self: flex-end;
+      margin-left: auto;
+      max-width: 100%;
+    }
+    
+    .assistant-bubble {
+      background: var(--mat-app-surface-container-high);
+      color: var(--mat-app-on-surface);
+      border: 1px solid var(--mat-app-border-variant);
+      border-bottom-left-radius: 4px;
+      max-width: 100%;
+    }
+    
+    /* Alineación de contenido según emisor */
+    .user-message {
+      align-items: flex-end;
+      text-align: right;
+      align-self: flex-end;
+    }
+    
+    .assistant-message {
+      align-items: flex-start;
+      text-align: left;
+      align-self: flex-start;
     }
 
     .message-text {

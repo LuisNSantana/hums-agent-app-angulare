@@ -70,18 +70,33 @@ import { MessageAction, MessageActionType } from '../chat-messages/chat-messages
       gap: 8px;
       min-width: 0;
       max-width: calc(100% - 56px);
+      width: 100%;
     }
 
     .message.user {
       flex-direction: row-reverse;
     }
 
-    .message.assistant .message-content {
+    /* Alineación de contenido según el rol */
+    .message.assistant .message-content-container {
       align-items: flex-start;
     }
 
-    .message.user .message-content {
+    .message.user .message-content-container {
       align-items: flex-end;
+    }
+    
+    /* Aseguramos que app-message-content reciba el ancho adecuado */
+    .message.user app-message-content {
+      width: 100%;
+      display: flex;
+      justify-content: flex-end;
+    }
+    
+    .message.assistant app-message-content {
+      width: 100%;
+      display: flex;
+      justify-content: flex-start;
     }
 
     .message-attachments {

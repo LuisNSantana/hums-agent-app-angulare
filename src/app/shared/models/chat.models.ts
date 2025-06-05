@@ -1,6 +1,6 @@
 /**
  * Chat Models - Domain entities for AI Chat Application
- * Following Domain Driven Design principles
+ * Following Domain Driven Design principles with strict type safety
  */
 
 export interface ChatMessage {
@@ -95,6 +95,19 @@ export interface ChatUIState {
   sidebarOpen: boolean;
   selectedModel: string;
   error: string | null;
+}
+
+// Message Action Types
+export enum ChatMessageActionType {
+  Copy = 'copy',
+  Regenerate = 'regenerate',
+  Edit = 'edit'
+}
+
+export interface ChatMessageAction {
+  type: ChatMessageActionType | string;
+  messageId: string;
+  data?: unknown;
 }
 
 // Error Types
