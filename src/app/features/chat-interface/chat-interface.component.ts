@@ -69,21 +69,20 @@ import { LayoutService } from './services/layout.service';
               <div class="welcome-content">
                 <div class="welcome-icon">
                   <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-                    <path d="M9 12l2 2 4-4"/>
-                    <path d="M21 12c0 1.657-.25 3.25-.713 4.727-.46 1.477-1.146 2.829-2.006 3.956-.86 1.127-1.895 2.03-3.036 2.647C13.965 23.948 12.5 24 12 24s-1.965-.052-3.245-.67c-1.14-.617-2.176-1.52-3.036-2.647-.86-1.127-1.546-2.479-2.006-3.956C3.25 15.25 3 13.657 3 12s.25-3.25.713-4.727c.46-1.477 1.146-2.829 2.006-3.956.86-1.127 1.895-2.03 3.036-2.647C10.035.052 11.5 0 12 0s1.965.052 3.245.67c1.14.617 2.176 1.52 3.036 2.647.86 1.127 1.546 2.479 2.006 3.956C20.75 8.75 21 10.343 21 12z"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/>
                   </svg>
                 </div>
-                <h1 class="welcome-title">Welcome to Agent Hums</h1>
+                <h1 class="welcome-title">Welcome to Cleo</h1>
                 <p class="welcome-subtitle">
                   Your AI-powered assistant ready to help with any task.
-                  Start a conversation to get started.
+                  Start a conversation to explore what we can accomplish together.
                 </p>
                 <button 
                   class="welcome-button"
                   (click)="onNewConversation()"
                 >
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 5v14M5 12h14"/>
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm5 11h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/>
                   </svg>
                   Start New Conversation
                 </button>

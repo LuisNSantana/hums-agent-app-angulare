@@ -25,7 +25,7 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
       <!-- Message Header -->
       <div class="message-header">
         <span class="message-role">
-          {{ message().role === 'user' ? 'You' : 'Agent Hums' }}
+          {{ message().role === 'user' ? 'You' : 'Cleo' }}
         </span>
         <span class="message-time">
           {{ formatter.formatTime(message().timestamp) }}

@@ -12,7 +12,7 @@ import { Injectable, signal, effect } from '@angular/core';
 })
 export class LayoutService {
   readonly sidebarOpen = signal(true);
-  readonly displaySuggestions = signal(true);
+  readonly displaySuggestions = signal(false); // Desactivadas por defecto para ahorrar espacio
   
   constructor() {
     // Setup responsive behavior

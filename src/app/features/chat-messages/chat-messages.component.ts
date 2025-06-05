@@ -100,7 +100,7 @@ export interface MessageAction {
                     <div class="bubble"></div>
                   </div>
                   <span class="typing-text">
-                    <span class="thinking-gradient">Agent Hums is thinking...</span>
+                    <span class="thinking-gradient">Cleo is thinking...</span>
                   </span>
                 </div>
               </div>
@@ -113,7 +113,7 @@ export interface MessageAction {
       flex: 1;
       overflow-y: auto;
       scroll-behavior: smooth;
-      background: var(--mat-app-background);
+      background: #000000;
       position: relative;
     }
 
@@ -158,7 +158,7 @@ export interface MessageAction {
       height: 100%;
       text-align: center;
       padding: 48px 24px;
-      background: var(--mat-app-surface-container);
+      background: rgba(20, 20, 20, 0.8);
       border: 1px solid var(--mat-app-border);
       border-radius: 24px;
       margin: 48px auto;
@@ -522,6 +522,6 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
           return `Ejecutando herramienta: ${tool}`;
       }
     }
-    return 'Agent Hums is thinking...';
+    return 'Cleo is thinking...';
   });
 }

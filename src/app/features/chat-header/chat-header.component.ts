@@ -73,8 +73,11 @@ import { AuthService } from '../../core/services/auth.service';
               </span>
             </div>
           } @else {
-            <h1 class="conversation-title">Agent Hums</h1>
-            <p class="conversation-subtitle">Your AI-powered assistant</p>
+            <h1 class="conversation-title">
+              <img src="/img/logos/logocleo.png" alt="Cleo Logo" class="agent-logo" style="height: 24px; width: auto; margin-right: 8px; vertical-align: middle;" />
+              Cleo
+            </h1>
+            <p class="conversation-subtitle">By huminaryLabs</p>
           }
         </div>
       </div>

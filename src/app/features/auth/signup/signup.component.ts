@@ -27,7 +27,7 @@ import { PasswordStrengthIndicatorComponent } from '../../../shared/components/p
             </button>
           </div>
           <h1 class="auth-title">Create Account</h1>
-          <p class="auth-subtitle">Join Agent Hums and start your AI conversations</p>
+          <p class="auth-subtitle">Join Cleo and start your AI conversations</p>
         </mat-card-header>
         <mat-card-content>
 
