@@ -20,6 +20,20 @@ import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../shared/models/chat.models';
 import { ChatMessageComponent } from '../chat-message/chat-message.component';
 
+/**
+ * Define tipos de acciones de mensaje para type-safety
+ */
+export type MessageActionType = 'copy' | 'regenerate' | 'edit' | 'delete' | 'openTool';
+
+/**
+ * Interface para acciones de mensaje con tipado estricto
+ */
+export interface MessageAction {
+  type: MessageActionType;
+  messageId: string;
+  data?: unknown;
+}
+
 @Component({
   selector: 'app-chat-messages',
   standalone: true,
@@ -421,8 +435,8 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
   readonly isLoading = input<boolean>(false);
   readonly conversationId = input<string>('');
 
-  // Outputs
-  readonly messageAction = output<{ type: string; messageId: string; data?: any }>();
+  // Outputs con tipado estricto
+  readonly messageAction = output<MessageAction>();
 
   @ViewChild('messagesContainer') 
   private messagesContainer!: ElementRef<HTMLDivElement>;
@@ -450,29 +464,46 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
       this.shouldScrollToBottom = false;
     }
   }
-  onMessageAction(action: { type: string; messageId: string; data?: any }): void {
+  /**
+   * Maneja acciones desde los mensajes individuales y emite el evento al componente padre
+   * @param action - Acción del mensaje con tipo y datos
+   */
+  onMessageAction(action: MessageAction): void {
+    // Validación básica antes de emitir
+    if (!action.messageId) {
+      console.warn('MessageAction received without messageId');
+      return;
+    }
+    
+    // Emitir acción validada al componente padre
     this.messageAction.emit(action);
   }
 
+  /**
+   * Realiza scroll hasta la parte inferior de la conversación
+   * Optimizado para performance con requestAnimationFrame
+   */
   private scrollToBottom(): void {
     if (this.messagesContainer) {
-      const container = this.messagesContainer.nativeElement;
-      container.scrollTop = container.scrollHeight;
+      requestAnimationFrame(() => {
+        const container = this.messagesContainer.nativeElement;
+        container.scrollTop = container.scrollHeight;
+      });
     }
   }
 
   /**
-   * Devuelve true si el mensaje en streaming del agente tiene toolsUsed
+   * Computed property: Verifica si hay un mensaje de asistente en streaming que utiliza herramientas
    */
-  hasAssistantToolLoading(): boolean {
+  readonly hasAssistantToolLoading = computed(() => {
     const streamingMsg = this.messages().find(m => m.role === 'assistant' && m.isStreaming);
-    return !!(streamingMsg && streamingMsg.metadata?.toolsUsed?.length);
-  }
+    return !!streamingMsg?.metadata?.toolsUsed?.length;
+  });
 
   /**
-   * Devuelve el texto de loading según la herramienta usada
+   * Computed property: Devuelve el texto de loading según la herramienta usada
    */
-  toolLoadingText(): string {
+  readonly toolLoadingText = computed((): string => {
     const streamingMsg = this.messages().find(m => m.role === 'assistant' && m.isStreaming);
     if (streamingMsg && streamingMsg.metadata?.toolsUsed?.length) {
       const tool = streamingMsg.metadata.toolsUsed[0];
@@ -492,5 +523,5 @@ export class ChatMessagesComponent implements OnChanges, AfterViewChecked {
       }
     }
     return 'Agent Hums is thinking...';
-  }
+  });
 }
