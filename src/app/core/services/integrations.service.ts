@@ -5,7 +5,7 @@
 
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { BehaviorSubject, Observable, from, of } from 'rxjs';
+import { BehaviorSubject, Observable, from, of, firstValueFrom } from 'rxjs';
 import { map, catchError, tap,switchMap } from 'rxjs/operators';
 import { SupabaseClient } from '@supabase/supabase-js';
 import { AuthService } from './auth.service';
@@ -113,6 +113,60 @@ export class IntegrationsService {
    * @param userId The user ID to fetch tokens for
    * @returns Promise with Google Calendar tokens or null
    */
+  private async refreshGoogleCalendarToken(userId: string, refreshToken: string): Promise<GoogleCalendarTokens | null> {
+    console.log('[IntegrationsService] 🔄 Intentando refrescar token de Google Calendar para userId:', userId);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<OAuthTokenResponse>('https://oauth2.googleapis.com/token', {
+          client_id: environment.googleClientId,
+          client_secret: environment.googleClientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        })
+      );
+
+      if (response && response.access_token && response.expires_in) {
+        const newAccessToken = response.access_token;
+        const expiresInSeconds = response.expires_in;
+        const newExpiresAt = Date.now() + expiresInSeconds * 1000;
+
+        console.log('[IntegrationsService] ✨ Nuevo token de acceso obtenido. Expiración en:', new Date(newExpiresAt).toISOString());
+
+        // Actualizar en Supabase
+        const { error: updateError } = await this.supabase
+          .from('user_integrations')
+          .update({
+            google_calendar_token: newAccessToken,
+            google_calendar_token_expiry: new Date(newExpiresAt).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+
+        if (updateError) {
+          console.error('[IntegrationsService] 🚨 Error al actualizar token refrescado en Supabase:', updateError);
+          // No devolver el token si no se pudo guardar, para forzar una nueva autenticación si es necesario
+          return null;
+        }
+
+        console.log('[IntegrationsService] ✅ Token refrescado y actualizado en Supabase');
+        return {
+          access_token: newAccessToken,
+          refresh_token: refreshToken, // El refresh token original sigue siendo válido
+          expires_at: newExpiresAt,
+        };
+      } else {
+        console.error('[IntegrationsService] ❌ Respuesta inesperada del servidor de OAuth al refrescar token:', response);
+        return null;
+      }
+    } catch (error) {
+      console.error('[IntegrationsService] 💥 Excepción al refrescar token de Google Calendar:', error);
+      // Si el refresh token es inválido (e.g., revocado), Google devuelve un error (usualmente 400 o 401)
+      // En este caso, podríamos necesitar marcar la integración como desconectada o pedir al usuario que se reautentique.
+      // Por ahora, solo devolvemos null.
+      return null;
+    }
+  }
+
   private async fetchGoogleCalendarTokens(userId: string): Promise<GoogleCalendarTokens | null> {
     try {
       console.log('[IntegrationsService] 🔎 Consultando tokens de Google Calendar para userId:', userId);
@@ -148,18 +202,33 @@ export class IntegrationsService {
       }
       
       // Verificar si el token ha expirado
-      const tokenExpiry = data.google_calendar_token_expiry ? new Date(data.google_calendar_token_expiry) : null;
-      if (tokenExpiry && tokenExpiry < new Date()) {
-        console.warn('[IntegrationsService] ⚠️ Google Calendar token expirado. Expiración:', tokenExpiry, 'Hora actual:', new Date());
-        // Aquí se podría implementar la lógica de refresh token en el futuro
-        return null;
+      const tokenExpiry = data.google_calendar_token_expiry ? new Date(data.google_calendar_token_expiry).getTime() : null;
+      if (tokenExpiry && tokenExpiry < Date.now()) {
+        console.warn('[IntegrationsService] ⚠️ Google Calendar token expirado. Expiración:', 
+          new Date(tokenExpiry).toISOString(), 'Hora actual:', new Date().toISOString());
+        
+        if (data.google_calendar_refresh_token) {
+          console.log('[IntegrationsService] ⏳ Intentando refrescar token usando refresh_token...');
+          const refreshedTokens = await this.refreshGoogleCalendarToken(userId, data.google_calendar_refresh_token);
+          if (refreshedTokens) {
+            console.log('[IntegrationsService] ✅ Token refrescado exitosamente durante la obtención.');
+            return refreshedTokens;
+          } else {
+            console.warn('[IntegrationsService] ❌ Falló el intento de refrescar el token.');
+            // Si el refresco falla, se devuelve null para indicar que no hay token válido
+            return null;
+          }
+        } else {
+          console.warn('[IntegrationsService] ⚠️ No hay refresh_token disponible para refrescar el token expirado.');
+          return null;
+        }
       }
       
       // Mapear los campos de la tabla user_integrations a nuestra interfaz GoogleCalendarTokens
       const result = {
         access_token: data.google_calendar_token,
         refresh_token: data.google_calendar_refresh_token,
-        expires_at: tokenExpiry ? tokenExpiry.getTime() : undefined
+        expires_at: tokenExpiry ? tokenExpiry : undefined // tokenExpiry ya es un timestamp (number) o null
       };
       
       console.log('[IntegrationsService] ✅ Tokens recuperados correctamente');

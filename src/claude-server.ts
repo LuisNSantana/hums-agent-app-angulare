@@ -16,6 +16,7 @@ import cors from 'cors';
 import pdfParse from 'pdf-parse';
 import { google } from 'googleapis';
 import { generalSystemPrompt } from './llms/prompts/general-prompt';
+import { getChatFlowExpressPrompt, ChatFlowExpressPromptArgs } from './llms/prompts/chat-flow-express-prompt';
 
 // 🌍 Environment Configuration
 const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY'] || '';
@@ -1122,42 +1123,31 @@ Por favor, proporciona una respuesta basada principalmente en la información de
       toolsUsed
     });
 
-    // Execute the chat flow with enhanced message but without document tools to avoid duplication
-    const fullPrompt = `Eres Agent Hums, un asistente AI avanzado desarrollado con Angular 20 y Claude 3.5 Sonnet. 
+    // Construct accessTokenInfo to be included in the prompt
+    let accessTokenInfo = '';
+    if (accessToken) {
+      console.log('🔑 Google Calendar Access Token received in /chatFlow:', accessToken.substring(0, 15) + '...');
+      accessTokenInfo = `Se ha proporcionado un token de acceso para Google Calendar. Al usar herramientas de Google Calendar, incluye este token como el parámetro 'accessToken'. Token: ${accessToken}`;
+    } else {
+      console.log('⚠️ No Google Calendar Access Token received in /chatFlow.');
+    }
 
-PERSONALIDAD:
-- Amigable, profesional y servicial
-- Experto en tecnología, desarrollo y temas generales
-- Proactivo en el uso de herramientas cuando es necesario
-- Respuestas concisas pero completas
+    // Build conversation context string for the prompt
+    const conversationHistoryForPrompt = (conversationHistory || [])
+      .map((msg: { role: 'user' | 'assistant'; content: string }) => `${msg.role === 'user' ? 'Usuario' : 'Asistente'}: ${msg.content}`)
+      .join('\n\n');
 
-CAPACIDADES:
-- Conversación general inteligente
-- Búsqueda web en tiempo real (searchWeb)
-- Análisis profundo de información web (analyzeWeb)
-- Análisis de documentos PDF (analyzeDocument)
-- Integración con Google Calendar (listGoogleCalendarEvents, createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent)
+    // Prepare arguments for the prompt function
+    const promptArgs: ChatFlowExpressPromptArgs = {
+      currentDate: new Date().toLocaleDateString('es-MX'),
+      // Combine formatted conversation history and document context
+      documentContext: conversationHistoryForPrompt + (documentContext ? `\n\n${documentContext}` : ''), 
+      userMessage: enhancedMessage || message, // Use enhancedMessage if available, otherwise original message
+      accessTokenInfo: accessTokenInfo
+    };
 
-INSTRUCCIONES DE USO DE HERRAMIENTAS:
-- USA searchWeb cuando necesites información actualizada, datos recientes, noticias, precios, eventos actuales
-- USA analyzeWeb para investigaciones más profundas que requieren múltiples búsquedas y análisis
-- USA analyzeDocument cuando el usuario envíe documentos PDF para analizar su contenido
-- USA listGoogleCalendarEvents para obtener eventos del calendario de Google
-- USA createGoogleCalendarEvent para crear eventos en el calendario de Google
-- USA updateGoogleCalendarEvent para actualizar eventos en el calendario de Google
-- USA deleteGoogleCalendarEvent para eliminar eventos del calendario de Google
-- NO uses herramientas para preguntas generales que puedes responder con tu conocimiento
-- Siempre explica qué herramienta vas a usar y por qué
-
-FORMATO DE RESPUESTA:
-- Menciona si usaste herramientas para obtener información
-- Cita fuentes cuando sea relevante
-- Mantén un tono conversacional y natural
-
-Fecha actual: ${new Date().toLocaleDateString('es-MX')}
-
-${documentContext ? `CONVERSACIÓN PREVIA:\n${documentContext}\n\n` : ''}MENSAJE ACTUAL:
-Usuario: ${message}`;
+    // Generate the full prompt using the externalized function
+    const fullPrompt = getChatFlowExpressPrompt(promptArgs);
 
     // Lista de herramientas disponibles para Claude 3.5 Sonnet
     const chatAvailableTools = [
