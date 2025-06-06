@@ -3,24 +3,26 @@
  * Following Clean Architecture and SOLID principles
  */
 
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
+import { firstValueFrom, of } from 'rxjs';
+import { catchError } from 'rxjs/operators';
 import { Observable, BehaviorSubject, Subject } from 'rxjs';
-import { catchError, map, tap } from 'rxjs/operators';
+
 import { 
   ChatMessage, 
-  Conversation, 
-  ConversationSettings,
   ChatRequest, 
-  ChatResponse, 
+  ConversationSettings,
+  Conversation,
   StreamChunk, 
-  ChatError,
-  AIModel 
+  AIModel,
+  ChatError 
 } from '../../shared/models/chat.models';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
 import { AuthStateService } from './auth'; // Import AuthStateService
 import { SystemPromptsService } from './prompts/system-prompts.service';
+import { IntegrationsService } from './integrations.service'; // Import IntegrationsService
 
 @Injectable({
   providedIn: 'root'
@@ -35,6 +37,7 @@ export class ChatService {
   private readonly authService = inject(AuthService);
   private readonly authStateService = inject(AuthStateService);
   private readonly systemPromptsService = inject(SystemPromptsService);
+  private readonly integrationsService = inject(IntegrationsService);
   
   // Reactive state with signals (Angular 20+)
   private readonly _conversations = signal<Conversation[]>([]);
@@ -141,15 +144,27 @@ export class ChatService {
     let assistantMessageId: string | null = null;
     
     try {
+      console.log('[ChatService] 📡 Iniciando streaming de respuesta para conversación:', request.conversationId);
+      
       // Get current conversation for settings
       const currentConversation = this._currentConversation();
-        // Build conversation history for Claude
-      const conversationHistory = this._messages()
-        .filter(m => m.conversationId === request.conversationId && !m.isStreaming)
-        .map(m => ({
-          role: m.role === 'user' ? 'user' : 'assistant',
-          content: m.content
-        }));
+      console.log('[ChatService] 📓 Usando conversación actual:', currentConversation?.id);
+      
+      // Build conversation history for Claude - importante para el contexto
+      const allMessages = this._messages();
+      const messagesForConversation = allMessages.filter(m => m.conversationId === request.conversationId && !m.isStreaming);
+      
+      console.log('[ChatService] 💬 Total mensajes:', allMessages.length, 
+        'Mensajes relevantes para la conversación:', messagesForConversation.length);
+      
+      // Convertir los mensajes al formato esperado por Claude (roles user/assistant y contenido)
+      const conversationHistory = messagesForConversation.map(m => ({
+        role: m.role === 'user' ? 'user' : 'assistant',
+        content: m.content
+      }));
+      
+      console.log('[ChatService] 📋 Historia de conversación preparada con', 
+        conversationHistory.length, 'mensajes');
 
       // Prepare documents for analysis if any PDF attachments are present
       let documentsForAnalysis: any[] = [];
@@ -168,21 +183,82 @@ export class ChatService {
           }));
       }
 
+      // Obtener el token de Google Calendar desde el servicio de integraciones
+      console.log('[ChatService] 🔍 Obteniendo token de Google Calendar...');
+      let accessToken: string | null = null;
+      try {
+        // Verificar usuario autenticado antes de obtener token de Google Calendar
+        const authUser = this.authStateService.getCurrentUser();
+        console.log('[ChatService] 👤 Usuario autenticado para token:', authUser?.id ?? 'ninguno');
+        
+        if (!authUser) {
+          console.warn('[ChatService] ⚠️ No hay usuario autenticado para obtener token de Google Calendar');
+        } else {
+          // Usar firstValueFrom para convertir el Observable a una promesa
+          accessToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
+          console.log('[ChatService] 🔑 Token de Google Calendar obtenido:', 
+            accessToken ? '✅ Token disponible' : '❌ Token no disponible');
+          
+          if (!accessToken) {
+            // Intenta forzar una segunda consulta con un pequeño retraso por si acaso
+            console.log('[ChatService] ⏳ Intentando obtener token nuevamente...');
+            await new Promise(resolve => setTimeout(resolve, 100));
+            accessToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
+            console.log('[ChatService] 🔑 Segundo intento para token:', 
+              accessToken ? '✅ Token disponible' : '❌ Token no disponible');
+          }
+        }
+      } catch (error) {
+        console.warn('[ChatService] ⚠️ Error al obtener token de Google Calendar:', error);
+        // Continuar sin token, el servidor manejará la ausencia
+      }
+
+      // Preparar el payload para enviar al servidor
       const claudeRequest = {
         message: request.message,
-        conversationHistory: conversationHistory,
-        documents: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined
+        conversationHistory: conversationHistory.length > 0 ? conversationHistory : [],
+        documents: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined,
+        accessToken: accessToken || null // Forzar un valor explícito (null en lugar de undefined)
       };
+      
+      // Verificación CRÍTICA - asegurarse de que el token esté presente si está disponible
+      if (accessToken && claudeRequest.accessToken !== accessToken) {
+        console.error('[ChatService] 🚨 ERROR CRÍTICO: El token no se asignó correctamente al payload');
+        claudeRequest.accessToken = accessToken; // Forzar asignación
+      }
 
-      console.log('[ChatService] Enviando a Claude Server:', claudeRequest);
-
+      // Log DETALLADO del payload final ANTES de enviar
+      console.log('[ChatService] FINAL PAYLOAD PREPARATION - claudeRequest:', 
+        JSON.stringify(claudeRequest, (key, value) => 
+          key === 'file' && typeof value === 'string' && value.length > 100 ? value.substring(0,100) + '...[TRUNCATED]' : value, 
+        2)
+      );
+      console.log(`[ChatService] FINAL PAYLOAD accessToken value type: ${typeof accessToken}, value: ${accessToken ? 'present' : 'null/undefined'}`);
+ 
       // Call Claude server FIRST to get tools information
+      console.log('[ChatService] 🚀 Enviando solicitud a Claude Server...');
+      
+      // Prevenir posibles problemas con la serialización
+      const requestPayload = {
+        message: claudeRequest.message,
+        conversationHistory: claudeRequest.conversationHistory,
+        documents: claudeRequest.documents,
+        accessToken: accessToken // Asignar directamente el token aquí
+      };
+      
+      console.log('[ChatService] 📣 SENDING FINAL PAYLOAD:', JSON.stringify({
+        message: requestPayload.message.substring(0, 20) + '...',
+        historyLength: requestPayload.conversationHistory.length,
+        accessTokenPresent: !!requestPayload.accessToken,
+        accessTokenType: typeof requestPayload.accessToken
+      }));
+      
       const response = await fetch('http://localhost:3001/chatFlow', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(claudeRequest)
+        body: JSON.stringify(requestPayload)
       });
 
       if (!response.ok) {

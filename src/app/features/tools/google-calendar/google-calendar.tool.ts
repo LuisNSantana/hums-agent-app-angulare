@@ -56,6 +56,12 @@ const DeleteEventSchema = z.object({
   calendarId: z.string().default('primary'),
 });
 
+import { Injectable, inject } from '@angular/core';
+import { environment } from '../../../../environments/environment';
+import { AuthService } from '../../../core/services/auth.service';
+import { IntegrationsService } from '../../../core/services/integrations.service';
+import { firstValueFrom } from 'rxjs';
+
 export class GoogleCalendarTool implements Tool {
   public readonly id = 'google-calendar';
   public readonly name = 'Google Calendar Manager';
@@ -126,34 +132,36 @@ export class GoogleCalendarTool implements Tool {
 
   private calendar: any;
   private auth: any;
+  private readonly authService = inject(AuthService);
+  private readonly integrationsService = inject(IntegrationsService);
 
   /**
-   * Initialize Google Calendar API client
+   * Inicialización mínima para cumplir la interfaz Tool
    */
   async initialize(): Promise<boolean> {
     try {
-      // Initialize OAuth2 client
-      this.auth = new google.auth.OAuth2(
-        process.env['GOOGLE_OAUTH_CLIENT_ID'],
-        process.env['GOOGLE_OAUTH_CLIENT_SECRET'],
-        'http://localhost:4200/auth/callback'
-      );
-
-      // Set credentials if available
-      const credentials = this.getStoredCredentials();
-      if (credentials) {
-        this.auth.setCredentials(credentials);
-      }
-
-      // Initialize Calendar API
-      this.calendar = google.calendar({ version: 'v3', auth: this.auth });
-
-      console.log('[GoogleCalendarTool] Initialized successfully');
+      await this.initializeCalendarClient();
       return true;
-    } catch (error) {
-      console.error('[GoogleCalendarTool] Initialization failed:', error);
+    } catch (e) {
       return false;
     }
+  }
+
+  /**
+   * Initialize Google Calendar API client with secure credentials
+   */
+  private async initializeCalendarClient(): Promise<void> {
+    const credentials = await this.getStoredCredentials();
+    if (!credentials?.access_token) {
+      throw new Error('Google Calendar not connected. Please connect your account.');
+    }
+    this.auth = new google.auth.OAuth2({
+      clientId: environment.googleClientId,
+      // clientSecret is not used in client-side OAuth flows
+      // redirectUri is also typically handled by the client-side auth flow (GIS)
+    });
+    this.auth.setCredentials(credentials);
+    this.calendar = google.calendar({ version: 'v3', auth: this.auth });
   }
 
   /**
@@ -161,8 +169,22 @@ export class GoogleCalendarTool implements Tool {
    */
   async execute(params: any): Promise<GenkitToolResult> {
     try {
+      // Validar usuario autenticado
+      const userId = this.authService.getCurrentUserId();
+      if (!userId) {
+        return { success: false, error: 'User not authenticated. Please sign in to use Google Calendar.' };
+      }
+      // Validar conexión activa usando integrationStatus$
+      const status = await firstValueFrom(this.integrationsService.integrationStatus$);
+      if (!status?.googleCalendarConnected) {
+        return { success: false, error: 'Google Calendar is not connected. Please connect your account.' };
+      }
+      // Inicializar cliente
+      if (!this.calendar) {
+        await this.initializeCalendarClient();
+      }
+      // Validar y despachar acción
       const validatedParams = this.schema.parse(params);
-      
       switch (validatedParams.action) {
         case 'create':
           return await this.createEvent(validatedParams);
@@ -173,14 +195,11 @@ export class GoogleCalendarTool implements Tool {
         case 'delete':
           return await this.deleteEvent(validatedParams);
         default:
-          throw new Error(`Unknown action: ${(validatedParams as any).action}`);
+          return { success: false, error: `Unknown action: ${(validatedParams as any).action}` };
       }
     } catch (error) {
       console.error('[GoogleCalendarTool] Execution error:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      };
+      return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
     }
   }
 
@@ -360,11 +379,22 @@ export class GoogleCalendarTool implements Tool {
   }
 
   /**
-   * Get stored OAuth2 credentials (placeholder)
+   * Get stored OAuth2 credentials securely from IntegrationsService
    */
-  private getStoredCredentials(): any {
-    // TODO: Implement credential storage/retrieval
-    // This should integrate with your auth system
-    return null;
+  private async getStoredCredentials(): Promise<any> {
+    return await this.integrationsService.getGoogleCalendarCredentials();
+  }
+
+  /**
+   * Verifica si el usuario tiene Google Calendar conectado (vía IntegrationsService)
+   */
+  private async isCalendarConnected(): Promise<boolean> {
+    try {
+      const status = await firstValueFrom(this.integrationsService.integrationStatus$);
+      return !!status?.googleCalendarConnected;
+    } catch (error) {
+      console.error('[GoogleCalendarTool] Error checking calendar connection:', error);
+      return false;
+    }
   }
 }

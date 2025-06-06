@@ -1,0 +1,109 @@
+<div class="integrations-page">
+  <!-- Header con navegación -->
+  <div class="page-header">
+    <button class="back-button" (click)="navigateToChat()">
+      <mat-icon>arrow_back</mat-icon>
+      <span>Back to Chat</span>
+    </button>
+    <h1>App Integrations</h1>
+  </div>
+
+  <!-- Contenido principal -->
+  <div class="integrations-container">
+    <div class="section-intro">
+      <h2>Connect your accounts</h2>
+      <p>Enhance your experience by connecting these services to your account.</p>
+    </div>
+
+    <!-- Google Calendar Integration Card -->
+    <div class="integration-card" [class.connected]="googleCalendarConnected()">
+      <div class="integration-header">
+        <div class="integration-logo">
+          <mat-icon>event</mat-icon>
+        </div>
+        <div class="integration-title">
+          <h3>Google Calendar</h3>
+          <div class="status-indicator">
+            <span class="status-dot" [class.connected]="googleCalendarConnected()"></span>
+            <span class="status-text">{{ googleCalendarConnected() ? 'Connected' : 'Not Connected' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="integration-body">
+        <p>Link your Google Calendar to schedule events directly from chats, get reminders, and view upcoming meetings.</p>
+        
+        <div class="integration-features">
+          <div class="feature">
+            <mat-icon>event_available</mat-icon>
+            <span>Create events</span>
+          </div>
+          <div class="feature">
+            <mat-icon>schedule</mat-icon>
+            <span>Get reminders</span>
+          </div>
+          <div class="feature">
+            <mat-icon>today</mat-icon>
+            <span>View schedule</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="integration-actions">
+        @if (googleCalendarConnected()) {
+          <button class="disconnect-button" (click)="disconnectGoogleCalendar()">
+            <mat-icon>link_off</mat-icon>
+            Disconnect
+          </button>
+        } @else {
+          <button class="connect-button" (click)="connectGoogleCalendar()">
+            <mat-icon>add_link</mat-icon>
+            Connect Google Calendar
+          </button>
+        }
+      </div>
+    </div>
+
+    <!-- Google Drive Integration Card (para futura implementación) -->
+    <div class="integration-card coming-soon">
+      <div class="integration-header">
+        <div class="integration-logo">
+          <mat-icon>cloud</mat-icon>
+        </div>
+        <div class="integration-title">
+          <h3>Google Drive</h3>
+          <div class="status-indicator">
+            <span class="status-text coming-soon">Coming Soon</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="integration-body">
+        <p>Access your Google Drive files directly from chats, share documents, and save important information.</p>
+        
+        <div class="integration-features">
+          <div class="feature">
+            <mat-icon>attach_file</mat-icon>
+            <span>Share files</span>
+          </div>
+          <div class="feature">
+            <mat-icon>folder</mat-icon>
+            <span>Access documents</span>
+          </div>
+          <div class="feature">
+            <mat-icon>save_alt</mat-icon>
+            <span>Save to Drive</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="integration-actions">
+        <button class="connect-button disabled">
+          <mat-icon>hourglass_empty</mat-icon>
+          Coming Soon
+        </button>
+      </div>
+    </div>
+
+  </div>
+</div>

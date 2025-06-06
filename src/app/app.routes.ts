@@ -44,10 +44,21 @@ export const routes: Routes = [
     path: 'chat',
     canActivate: [authGuard],
     loadComponent: () => import('./features/chat-interface/chat-interface.component').then(m => m.ChatInterfaceComponent)
-  },  {
+  },
+  {
     path: 'profile',
     canActivate: [authGuard],
     loadComponent: () => import('./features/auth/profile/profile.component').then(m => m.ProfileComponent)
+  },
+  {
+    path: 'integrations',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/integrations/integrations-page/integrations-page').then(m => m.IntegrationsPage)
+  },
+  {
+    path: 'integrations/callback',
+    canActivate: [authGuard],
+    loadComponent: () => import('./features/integrations/integrations-callback/integrations-callback').then(m => m.IntegrationsCallback)
   },  {
     path: 'settings',
     canActivate: [authGuard],

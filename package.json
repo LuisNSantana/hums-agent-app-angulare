@@ -16,7 +16,7 @@
     "claude:server:fixed": "tsx src/claude-server-fixed.ts",
     "serve:genkit": "tsx src/genkit-server.ts",
     "serve:hybrid": "tsx src/genkit-hybrid-server.ts",
-    "serve:claude": "tsx src/claude-brave-test.ts",
+    "serve:claude": "tsx src/claude-server.ts",
     "serve:production": "tsx src/claude-server.ts",
     "dev:full": "concurrently \"npm run start\" \"npm run serve:genkit\"",
     "dev:hybrid": "concurrently \"npm run start\" \"npm run serve:hybrid\"",

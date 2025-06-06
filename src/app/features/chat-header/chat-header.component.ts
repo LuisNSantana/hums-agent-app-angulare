@@ -34,13 +34,14 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
+import { MatIconModule } from '@angular/material/icon';
 import { Conversation, AIModel } from '../../shared/models/chat.models';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
   selector: 'app-chat-header',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
+  imports: [CommonModule, FormsModule, RouterModule, MatIconModule],
   template: `
     <header class="chat-header">
       <!-- Left Section -->
@@ -185,8 +186,9 @@ import { AuthService } from '../../core/services/auth.service';
                 <a routerLink="/profile" class="dropdown-item" (click)="closeUserMenu()">
                   <span>Profile Settings</span>
                 </a>
-                <div class="dropdown-item" (click)="onOpenSettings()">
-                  <span>App Settings</span>
+                <div class="dropdown-item" (click)="navigateToIntegrations()">
+                  <mat-icon>integration_instructions</mat-icon>
+                  <span>Integrations</span>
                 </div>
                 <div class="dropdown-divider"></div>
                 <div class="dropdown-item sign-out" (click)="onSignOut()">
@@ -902,8 +904,17 @@ export class ChatHeaderComponent implements OnInit {
    * Handle settings button
    */
   onOpenSettings(): void {
-    // TODO: Implement settings modal
-    console.log('Open settings');
+    // Redirigir a la página de configuración
+    this.router.navigate(['/settings']);
+    this.closeUserMenu();
+  }
+
+  /**
+   * Navigate to integrations page
+   */
+  navigateToIntegrations(): void {
+    this.router.navigate(['/integrations']);
+    this.closeUserMenu();
   }
   /**
    * Handle export chat

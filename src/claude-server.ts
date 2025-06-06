@@ -6,12 +6,16 @@
 
 import 'dotenv/config';
 import { genkit } from 'genkit';
+import { MessageData } from '@genkit-ai/ai';
+import { defineFlow, runFlow } from '@genkit-ai/flow';
 import { anthropic, claude35Sonnet } from 'genkitx-anthropic';
-import { z } from 'zod';
+import { z } from '@genkit-ai/core/schema';
 import axios from 'axios';
-import express from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import pdfParse from 'pdf-parse';
+import { google } from 'googleapis';
+import { generalSystemPrompt } from './llms/prompts/general-prompt';
 
 // 🌍 Environment Configuration
 const ANTHROPIC_API_KEY = process.env['ANTHROPIC_API_KEY'] || '';
@@ -121,14 +125,18 @@ async function searchWithBrave(query: string, limit: number = 5): Promise<BraveS
 }
 
 // 🛠️ Claude 3.5 Sonnet Tools
+
+// Esquema para searchWebTool
+const searchWebSchema = z.object({
+  query: z.string().describe('Consulta de búsqueda específica y clara en español'),
+  limit: z.number().optional().default(5).describe('Número de resultados (máximo 10)')
+});
+
 const searchWebTool = ai.defineTool(
   {
     name: 'searchWeb',
     description: 'Buscar información actualizada en internet usando Brave Search API. Ideal para obtener información reciente, noticias, datos actualizados, precios, eventos actuales.',
-    inputSchema: z.object({
-      query: z.string().describe('Consulta de búsqueda específica y clara en español'),
-      limit: z.number().optional().default(5).describe('Número de resultados (máximo 10)')
-    }),
+    inputSchema: searchWebSchema,
     outputSchema: z.object({
       success: z.boolean(),
       results: z.array(z.object({
@@ -141,22 +149,25 @@ const searchWebTool = ai.defineTool(
       timestamp: z.string()
     })
   },
-  async (input) => {
+  async (input: z.infer<typeof searchWebSchema>) => {
     console.log('🔧 Tool Execution: searchWeb', input);
     const limit = Math.min(input.limit || 5, 10);
     return await searchWithBrave(input.query, limit);
   }
 );
 
+// Esquema para analyzeWebTool
+const analyzeWebSchema = z.object({
+  topic: z.string().describe('Tema o pregunta específica a investigar'),
+  analysisType: z.enum(['comparison', 'trends', 'technical', 'news', 'general']).describe('Tipo de análisis deseado'),
+  searchQueries: z.array(z.string()).optional().describe('Consultas de búsqueda específicas (se generan automáticamente si no se proporcionan)')
+});
+
 const analyzeWebTool = ai.defineTool(
   {
     name: 'analyzeWeb',
     description: 'Buscar y analizar información específica en internet. Combina búsqueda web con análisis profundo.',
-    inputSchema: z.object({
-      topic: z.string().describe('Tema o pregunta específica a investigar'),
-      analysisType: z.enum(['comparison', 'trends', 'technical', 'news', 'general']).describe('Tipo de análisis deseado'),
-      searchQueries: z.array(z.string()).optional().describe('Consultas de búsqueda específicas (se generan automáticamente si no se proporcionan)')
-    }),
+    inputSchema: analyzeWebSchema,
     outputSchema: z.object({
       analysis: z.string(),
       sources: z.array(z.object({
@@ -168,7 +179,7 @@ const analyzeWebTool = ai.defineTool(
       timestamp: z.string()
     })
   },
-  async (input) => {
+  async (input: z.infer<typeof analyzeWebSchema>) => {
     console.log('🔧 Tool Execution: analyzeWeb', input);
     
     // Generate search queries if not provided
@@ -220,17 +231,20 @@ Basado en ${uniqueResults.length} fuentes web actualizadas, se encontró informa
 );
 
 // 📄 Document Analysis Tool with Chunking Support
+const analyzeDocumentSchema = z.object({
+  documentBase64: z.string().describe('Contenido del documento PDF en formato base64'),
+  fileName: z.string().describe('Nombre del archivo PDF'),
+  analysisType: z.enum(['general', 'summary', 'extraction', 'legal', 'financial', 'technical']).describe('Tipo de análisis a realizar'),
+  specificQuestions: z.array(z.string()).optional().describe('Preguntas específicas sobre el documento'),
+  maxLength: z.number().optional().describe('Longitud máxima de contenido a extraer'),
+  chunkSize: z.number().optional().describe('Tamaño de cada chunk para procesamiento')
+});
+
 const analyzeDocumentTool = ai.defineTool(
   {
     name: 'analyzeDocument',
     description: 'Analizar documentos PDF enviados por el usuario. Extrae texto, proporciona resúmenes, identifica información clave. Soporta documentos grandes mediante chunking.',
-    inputSchema: z.object({
-      documentBase64: z.string().describe('Contenido del documento PDF en formato base64'),
-      fileName: z.string().describe('Nombre del archivo PDF'),
-      analysisType: z.enum(['summary', 'extract', 'analyze', 'entities']).default('summary').describe('Tipo de análisis: summary (resumen), extract (extraer datos), analyze (análisis completo), entities (entidades)'),
-      maxLength: z.number().optional().default(15000).describe('Longitud máxima del análisis en caracteres'),
-      chunkSize: z.number().optional().default(20000).describe('Tamaño de chunk en caracteres para documentos grandes')
-    }),
+    inputSchema: analyzeDocumentSchema,
     outputSchema: z.object({
       success: z.boolean(),
       content: z.string(),
@@ -252,12 +266,12 @@ const analyzeDocumentTool = ai.defineTool(
       error: z.string().optional()
     })
   },
-  async (input) => {
+  async (input: z.infer<typeof analyzeDocumentSchema>) => {
     console.log('🔧 Tool Execution: analyzeDocument', {
       fileName: input.fileName,
       analysisType: input.analysisType,
       base64Length: input.documentBase64.length,
-      chunkSize: input.chunkSize
+      base64Preview: input.documentBase64.substring(0, 100) + '...'
     });
     
     try {
@@ -280,17 +294,17 @@ const analyzeDocumentTool = ai.defineTool(
 
       // Implement chunking for large documents (Anthropic best practice: 20,000 characters)
       const chunks: string[] = [];
-      if (totalCharacters > input.chunkSize) {
+      if (totalCharacters > 15000) {
         console.log('📊 Document requires chunking:', {
           totalCharacters,
-          chunkSize: input.chunkSize,
-          estimatedChunks: Math.ceil(totalCharacters / input.chunkSize)
+          chunkSize: 15000,
+          estimatedChunks: Math.ceil(totalCharacters / 15000)
         });
 
         // Split into chunks with overlap to maintain context
-        const overlapSize = Math.floor(input.chunkSize * 0.1); // 10% overlap
-        for (let i = 0; i < totalCharacters; i += input.chunkSize - overlapSize) {
-          const chunk = pdfData.text.substring(i, i + input.chunkSize);
+        const overlapSize = Math.floor(15000 * 0.1); // 10% overlap
+        for (let i = 0; i < totalCharacters; i += 15000 - overlapSize) {
+          const chunk = pdfData.text.substring(i, i + 15000);
           if (chunk.trim().length > 0) {
             chunks.push(chunk);
           }
@@ -317,17 +331,23 @@ const analyzeDocumentTool = ai.defineTool(
         const chunkPrefix = chunks.length > 1 ? `Parte ${i + 1}/${chunks.length} del documento "${input.fileName}":\n\n` : '';
         
         switch (input.analysisType) {
+          case 'general':
+            chunkAnalysisPrompt = `${chunkPrefix}Analiza esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF y proporciona un resumen general.\n\nContenido:\n\n${chunk}`;
+            break;
           case 'summary':
             chunkAnalysisPrompt = `${chunkPrefix}Analiza esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF y proporciona un resumen comprensivo. ${chunks.length > 1 ? 'Enfócate en los puntos principales de esta sección.' : 'Incluye los puntos principales, temas importantes y conclusiones clave.'}\n\nContenido:\n\n${chunk}`;
             break;
-          case 'extract':
+          case 'extraction':
             chunkAnalysisPrompt = `${chunkPrefix}Extrae y lista toda la información importante de esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF: nombres, fechas, números, datos clave, direcciones, teléfonos, emails, etc.\n\nContenido:\n\n${chunk}`;
             break;
-          case 'analyze':
-            chunkAnalysisPrompt = `${chunkPrefix}Realiza un análisis detallado de esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF. ${chunks.length > 1 ? 'Enfócate en los temas y información relevante de esta sección.' : 'Incluye: resumen ejecutivo, temas principales, estructura del documento, información relevante, y conclusiones importantes.'}\n\nContenido:\n\n${chunk}`;
+          case 'legal':
+            chunkAnalysisPrompt = `${chunkPrefix}Analiza esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF desde una perspectiva legal. Identifica términos clave, fechas importantes, nombres de personas o entidades involucradas, y cualquier otra información relevante.\n\nContenido:\n\n${chunk}`;
             break;
-          case 'entities':
-            chunkAnalysisPrompt = `${chunkPrefix}Identifica y extrae todas las entidades nombradas en esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF: personas, organizaciones, lugares, fechas, números importantes, direcciones, contactos, etc. Presenta la información de forma estructurada.\n\nContenido:\n\n${chunk}`;
+          case 'financial':
+            chunkAnalysisPrompt = `${chunkPrefix}Analiza esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF desde una perspectiva financiera. Identifica números clave, fechas importantes, nombres de personas o entidades involucradas, y cualquier otra información relevante.\n\nContenido:\n\n${chunk}`;
+            break;
+          case 'technical':
+            chunkAnalysisPrompt = `${chunkPrefix}Analiza esta ${chunks.length > 1 ? 'parte del' : ''} documento PDF desde una perspectiva técnica. Identifica términos clave, fechas importantes, nombres de personas o entidades involucradas, y cualquier otra información relevante.\n\nContenido:\n\n${chunk}`;
             break;
         }
 
@@ -337,12 +357,12 @@ const analyzeDocumentTool = ai.defineTool(
           prompt: chunkAnalysisPrompt,
           config: {
             temperature: 0.3, // Lower temperature for more factual analysis
-            maxOutputTokens: Math.min(1000, Math.floor(input.maxLength / chunks.length)) // Distribute tokens across chunks
+            maxOutputTokens: Math.min(1000, Math.floor(15000 / chunks.length)) // Distribute tokens across chunks
           }
         });
 
         // Extract entities from this chunk
-        if (input.analysisType === 'entities' || input.analysisType === 'analyze') {
+        if (input.analysisType === 'general' || input.analysisType === 'summary' || input.analysisType === 'extraction') {
           const emailPattern = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
           const phonePattern = /\b\d{3}[-.]?\d{3}[-.]?\d{4}\b/g;
           const datePattern = /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g;
@@ -387,7 +407,7 @@ Proporciona un resumen final unificado que capture los puntos principales de tod
           prompt: summaryPrompt,
           config: {
             temperature: 0.3,
-            maxOutputTokens: Math.min(1500, Math.floor(input.maxLength / 2))
+            maxOutputTokens: Math.min(1500, Math.floor(15000 / 2))
           }
         });
 
@@ -396,8 +416,8 @@ Proporciona un resumen final unificado que capture los puntos principales de tod
 
       // Return the first chunk or combined content up to maxLength
       const contentToReturn = chunks.length > 1 
-        ? pdfData.text.substring(0, Math.min(input.maxLength, 5000)) // Limit content for large docs
-        : pdfData.text.substring(0, input.maxLength);
+        ? pdfData.text.substring(0, Math.min(15000, 5000)) // Limit content for large docs
+        : pdfData.text.substring(0, 15000);
 
       return {
         success: true,
@@ -434,28 +454,417 @@ Proporciona un resumen final unificado que capture los puntos principales de tod
   }
 );
 
-// 💬 Chat Flow with Claude 3.5 Sonnet
-const chatFlow = ai.defineFlow(
+// 📅 Google Calendar Tools
+
+// Schema y definición para listGoogleCalendarEventsTool
+const listGoogleCalendarEventSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  calendarId: z.string().optional().default('primary').describe('El ID del calendario. Por defecto es "primary".'),
+  timeMin: z.string().optional().describe('Fecha/hora de inicio (formato ISO 8601) para listar eventos. Por defecto, inicio del día actual.'),
+  timeMax: z.string().optional().describe('Fecha/hora de fin (formato ISO 8601) para listar eventos. Por defecto, fin del día actual.'),
+  maxResults: z.number().optional().default(10).describe('Número máximo de eventos a retornar.')
+});
+
+const listGoogleCalendarEventsTool = ai.defineTool(
   {
-    name: 'chat',
-    inputSchema: z.object({
-      message: z.string().describe('User message'),
-      conversationHistory: z.array(z.object({
-        role: z.enum(['user', 'assistant']),
-        content: z.string()
-      })).optional().describe('Previous conversation messages')
-    }),
+    name: 'listGoogleCalendarEvents',
+    description: 'Lista eventos del calendario de Google del usuario para un rango de fechas especificado, usando un token de acceso OAuth.',
+    inputSchema: listGoogleCalendarEventSchema,
     outputSchema: z.object({
-      response: z.string(),
-      toolsUsed: z.array(z.string()).optional(),
-      timestamp: z.string()
+      success: z.boolean(),
+      events: z.array(z.object({
+        id: z.string().optional(),
+        summary: z.string().optional(),
+        description: z.string().optional(),
+        start: z.object({ dateTime: z.string().optional(), date: z.string().optional() }).optional(),
+        end: z.object({ dateTime: z.string().optional(), date: z.string().optional() }).optional(),
+        htmlLink: z.string().optional()
+      })).optional(),
+      error: z.string().optional()
     })
   },
-  async (input) => {
+  async (input: z.infer<typeof listGoogleCalendarEventSchema>) => {
+    console.log('🔧 Tool Execution: listGoogleCalendarEvents', { calendarId: input.calendarId, timeMin: input.timeMin, hasAccessToken: !!input.accessToken });
+    try {
+      // Validar que el token exista
+      if (!input.accessToken) {
+        console.log('❌ No se encontró token de acceso para Google Calendar');
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Calendar esté conectado en la sección de integraciones.');
+      }
+      console.log('✅ Token de acceso para Google Calendar disponible');
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+
+      const calendar = google.calendar({ version: 'v3', auth });
+
+      const now = new Date();
+      const defaultTimeMin = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+      const defaultTimeMax = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).toISOString();
+
+      const response = await calendar.events.list({
+        calendarId: input.calendarId,
+        timeMin: input.timeMin || defaultTimeMin,
+        timeMax: input.timeMax || defaultTimeMax,
+        maxResults: input.maxResults,
+        singleEvents: true,
+        orderBy: 'startTime'
+      });
+
+      const events = response.data.items?.map(event => ({
+        id: event.id || undefined,
+        summary: event.summary || undefined,
+        description: event.description || undefined,
+        start: event.start ? { dateTime: event.start.dateTime || undefined, date: event.start.date || undefined } : undefined,
+        end: event.end ? { dateTime: event.end.dateTime || undefined, date: event.end.date || undefined } : undefined,
+        htmlLink: event.htmlLink || undefined
+      })) || [];
+
+      return { success: true, events };
+    } catch (error: any) {
+      console.error('❌ Google Calendar API Error:', error.message);
+      
+      // Manejar códigos de error específicos
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para acceder a este calendario.' };
+      } else if (error.code === 404) {
+        return { success: false, error: 'Error: Calendario no encontrado.' };
+      }
+      
+      return { success: false, error: `Error al listar eventos: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para createGoogleCalendarEventTool
+// Esquema de entrada para createGoogleCalendarEventTool
+const createGoogleCalendarEventSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  calendarId: z.string().optional().default('primary').describe('El ID del calendario. Por defecto es "primary".'),
+  summary: z.string().describe('Título del evento'),
+  description: z.string().optional().describe('Descripción del evento'),
+  location: z.string().optional().describe('Ubicación del evento'),
+  startDateTime: z.string().describe('Fecha y hora de inicio del evento (formato ISO 8601)'),
+  endDateTime: z.string().describe('Fecha y hora de fin del evento (formato ISO 8601)'),
+  timeZone: z.string().optional().default('America/Mexico_City').describe('Zona horaria del evento'),
+  attendees: z.array(z.string()).optional().describe('Lista de correos electrónicos de los asistentes'),
+  sendNotifications: z.boolean().optional().default(true).describe('Enviar notificaciones a los asistentes')
+});
+
+const createGoogleCalendarEventTool = ai.defineTool(
+  {
+    name: 'createGoogleCalendarEvent',
+    description: 'Crea un nuevo evento en el calendario de Google del usuario, usando un token de acceso OAuth.',
+    inputSchema: createGoogleCalendarEventSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      event: z.object({
+        id: z.string().optional(),
+        summary: z.string().optional(),
+        htmlLink: z.string().optional()
+      }).optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof createGoogleCalendarEventSchema>) => {
+    console.log('🔧 Tool Execution: createGoogleCalendarEvent', { summary: input.summary, hasAccessToken: !!input.accessToken });
+    
+    try {
+      // Validar que el token exista
+      if (!input.accessToken) {
+        console.log('❌ No se encontró token de acceso para Google Calendar');
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Calendar esté conectado en la sección de integraciones.');
+      }
+      console.log('✅ Token de acceso para Google Calendar disponible');
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+
+      const calendar = google.calendar({ version: 'v3', auth });
+
+      // Crear el objeto de evento
+      const eventData: {
+        summary: string;
+        description?: string;
+        location?: string;
+        start: {
+          dateTime: string;
+          timeZone?: string;
+        };
+        end: {
+          dateTime: string;
+          timeZone?: string;
+        };
+        attendees?: Array<{email: string}>;
+      } = {
+        summary: input.summary,
+        description: input.description,
+        location: input.location,
+        start: {
+          dateTime: input.startDateTime,
+          timeZone: input.timeZone
+        },
+        end: {
+          dateTime: input.endDateTime,
+          timeZone: input.timeZone
+        }
+      };
+
+      // Agregar asistentes si se proporcionaron
+      if (input.attendees && input.attendees.length > 0) {
+        eventData.attendees = input.attendees.map((email: string) => ({ email }));
+      }
+
+      const response = await calendar.events.insert({
+        calendarId: input.calendarId,
+        requestBody: eventData,
+        sendUpdates: input.sendNotifications ? 'all' : 'none'
+      });
+
+      return {
+        success: true,
+        event: {
+          id: response.data.id || undefined,
+          summary: response.data.summary || undefined,
+          htmlLink: response.data.htmlLink || undefined
+        }
+      };
+    } catch (error: any) {
+      console.error('❌ Google Calendar API Error:', error.message);
+      
+      // Manejar códigos de error específicos
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para crear eventos en este calendario.' };
+      } else if (error.code === 404) {
+        return { success: false, error: 'Error: Calendario no encontrado.' };
+      }
+      
+      return { success: false, error: `Error al crear evento: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para updateGoogleCalendarEventTool
+// Esquema de entrada para updateGoogleCalendarEventTool
+const updateGoogleCalendarEventSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  calendarId: z.string().optional().default('primary').describe('El ID del calendario. Por defecto es "primary".'),
+  eventId: z.string().describe('ID del evento a actualizar'),
+  summary: z.string().optional().describe('Nuevo título del evento'),
+  description: z.string().optional().describe('Nueva descripción del evento'),
+  location: z.string().optional().describe('Nueva ubicación del evento'),
+  startDateTime: z.string().optional().describe('Nueva fecha y hora de inicio del evento (formato ISO 8601)'),
+  endDateTime: z.string().optional().describe('Nueva fecha y hora de fin del evento (formato ISO 8601)'),
+  timeZone: z.string().optional().default('America/Mexico_City').describe('Nueva zona horaria del evento'),
+  attendees: z.array(z.string()).optional().describe('Nueva lista de correos electrónicos de los asistentes'),
+  sendNotifications: z.boolean().optional().default(true).describe('Enviar notificaciones a los asistentes')
+});
+
+const updateGoogleCalendarEventTool = ai.defineTool(
+  {
+    name: 'updateGoogleCalendarEvent',
+    description: 'Actualiza un evento existente en el calendario de Google del usuario, usando un token de acceso OAuth.',
+    inputSchema: updateGoogleCalendarEventSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      event: z.object({
+        id: z.string().optional(),
+        summary: z.string().optional(),
+        htmlLink: z.string().optional()
+      }).optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof updateGoogleCalendarEventSchema>) => {
+    console.log('🔧 Tool Execution: updateGoogleCalendarEvent', { eventId: input.eventId, hasAccessToken: !!input.accessToken });
+    try {
+      // Validar que el token exista
+      if (!input.accessToken) {
+        console.log('❌ No se encontró token de acceso para Google Calendar');
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Calendar esté conectado en la sección de integraciones.');
+      }
+      console.log('✅ Token de acceso para Google Calendar disponible');
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+
+      const calendar = google.calendar({ version: 'v3', auth });
+
+      // Primero obtener el evento actual
+      const currentEvent = await calendar.events.get({
+        calendarId: input.calendarId,
+        eventId: input.eventId
+      });
+
+      // Preparar datos para actualizar
+      const eventData: {
+        summary?: string;
+        description?: string;
+        location?: string;
+        start: {
+          dateTime: string;
+          timeZone: string;
+        };
+        end: {
+          dateTime: string;
+          timeZone: string;
+        };
+        attendees?: Array<{email: string}>;
+      } = {
+        summary: input.summary || currentEvent.data.summary || undefined,
+        description: input.description !== undefined ? input.description : (currentEvent.data.description || undefined),
+        location: input.location !== undefined ? input.location : (currentEvent.data.location || undefined),
+        start: {
+          dateTime: input.startDateTime || (currentEvent.data.start?.dateTime || ''),
+          timeZone: input.timeZone || (currentEvent.data.start?.timeZone || 'America/Mexico_City')
+        },
+        end: {
+          dateTime: input.endDateTime || (currentEvent.data.end?.dateTime || ''),
+          timeZone: input.timeZone || (currentEvent.data.end?.timeZone || 'America/Mexico_City')
+        }
+      };
+
+      // Actualizar asistentes si se proporcionaron
+      if (input.attendees) {
+        eventData.attendees = input.attendees.map((email: string) => ({ email }));
+      }
+
+      const response = await calendar.events.update({
+        calendarId: input.calendarId,
+        eventId: input.eventId,
+        requestBody: eventData,
+        sendUpdates: input.sendNotifications ? 'all' : 'none'
+      });
+
+      return {
+        success: true,
+        event: {
+          id: response.data.id || undefined,
+          summary: response.data.summary || undefined,
+          htmlLink: response.data.htmlLink || undefined
+        }
+      };
+    } catch (error: any) {
+      console.error('❌ Google Calendar API Error:', error.message);
+      
+      // Manejar códigos de error específicos
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para actualizar eventos en este calendario.' };
+      } else if (error.code === 404) {
+        return { success: false, error: 'Error: Evento o calendario no encontrado.' };
+      }
+      
+      return { success: false, error: `Error al actualizar evento: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para deleteGoogleCalendarEventTool
+const deleteGoogleCalendarEventSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  calendarId: z.string().optional().default('primary').describe('El ID del calendario. Por defecto es "primary".'),
+  eventId: z.string().describe('ID del evento a eliminar'),
+  sendNotifications: z.boolean().optional().default(true).describe('Enviar notificaciones a los asistentes')
+});
+
+const deleteGoogleCalendarEventTool = ai.defineTool(
+  {
+    name: 'deleteGoogleCalendarEvent',
+    description: 'Elimina un evento existente del calendario de Google del usuario, usando un token de acceso OAuth.',
+    inputSchema: deleteGoogleCalendarEventSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof deleteGoogleCalendarEventSchema>) => {
+    console.log('🔧 Tool Execution: deleteGoogleCalendarEvent', { eventId: input.eventId, hasAccessToken: !!input.accessToken });
+    try {
+      // Validar que el token exista
+      if (!input.accessToken) {
+        console.log('❌ No se encontró token de acceso para Google Calendar');
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Calendar esté conectado en la sección de integraciones.');
+      }
+      console.log('✅ Token de acceso para Google Calendar disponible');
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+
+      const calendar = google.calendar({ version: 'v3', auth });
+
+      await calendar.events.delete({
+        calendarId: input.calendarId,
+        eventId: input.eventId,
+        sendUpdates: input.sendNotifications ? 'all' : 'none'
+      });
+
+      return { success: true };
+    } catch (error: any) {
+      console.error('❌ Google Calendar API Error:', error.message);
+      
+      // Manejar códigos de error específicos
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para eliminar eventos de este calendario.' };
+      } else if (error.code === 404) {
+        return { success: false, error: 'Error: Evento o calendario no encontrado.' };
+      }
+      
+      return { success: false, error: `Error al eliminar evento: ${error.message}` };
+    }
+  }
+);
+
+// 💬 Chat Flow with Claude 3.5 Sonnet
+const chatFlowInputZodSchema = z.object({
+  message: z.string().describe('User message'),
+  conversationHistory: z.array(z.object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string()
+  })).optional().describe('Previous conversation messages'),
+  accessToken: z.string().optional().describe('Token de acceso OAuth 2.0 de Google para las herramientas de Calendar')
+});
+
+const chatFlowOutputZodSchema = z.object({
+  response: z.string(),
+  allToolsUsed: z.array(z.string()).optional(),
+  timestamp: z.string()
+});
+
+// Definiendo las herramientas disponibles para el chatFlow
+const availableTools = [
+  searchWebTool,
+  analyzeWebTool,
+  analyzeDocumentTool,
+  listGoogleCalendarEventsTool,
+  createGoogleCalendarEventTool,
+  updateGoogleCalendarEventTool,
+  deleteGoogleCalendarEventTool
+];
+
+const chatFlow = ai.defineFlow<typeof chatFlowInputZodSchema, typeof chatFlowOutputZodSchema>(
+  {
+    name: 'chat',
+    inputSchema: chatFlowInputZodSchema,
+    outputSchema: chatFlowOutputZodSchema
+  },
+  async (input: z.infer<typeof chatFlowInputZodSchema>) => {
     console.log('💬 Chat Flow Started:', { 
       message: input.message.substring(0, 100),
-      historyLength: input.conversationHistory?.length || 0
-    });    // Build conversation context
+      historyLength: input.conversationHistory?.length || 0,
+      accessTokenAvailable: !!input.accessToken
+    });
+    
+    // Registrar si tenemos un token de acceso para Google Calendar
+    const hasAccessToken = !!input.accessToken;
+    console.log(`🔑 Google Calendar Access Token disponible: ${hasAccessToken ? 'Sí' : 'No'}`);    // Build conversation context
     const conversationContext = (input.conversationHistory || [])
       .map(msg => `${msg.role === 'user' ? 'Usuario' : 'Asistente'}: ${msg.content}`)
       .join('\n\n');
@@ -473,11 +882,16 @@ CAPACIDADES:
 - Búsqueda web en tiempo real (searchWeb)
 - Análisis profundo de información web (analyzeWeb)
 - Análisis de documentos PDF (analyzeDocument)
+- Integración con Google Calendar (listGoogleCalendarEvents, createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent)
 
 INSTRUCCIONES DE USO DE HERRAMIENTAS:
 - USA searchWeb cuando necesites información actualizada, datos recientes, noticias, precios, eventos actuales
 - USA analyzeWeb para investigaciones más profundas que requieren múltiples búsquedas y análisis
 - USA analyzeDocument cuando el usuario envíe documentos PDF para analizar su contenido
+- USA listGoogleCalendarEvents para obtener eventos del calendario de Google
+- USA createGoogleCalendarEvent para crear eventos en el calendario de Google
+- USA updateGoogleCalendarEvent para actualizar eventos en el calendario de Google
+- USA deleteGoogleCalendarEvent para eliminar eventos del calendario de Google
 - NO uses herramientas para preguntas generales que puedes responder con tu conocimiento
 - Siempre explica qué herramienta vas a usar y por qué
 
@@ -491,24 +905,40 @@ Fecha actual: ${new Date().toLocaleDateString('es-MX')}
 ${conversationContext ? `CONVERSACIÓN PREVIA:\n${conversationContext}\n\n` : ''}MENSAJE ACTUAL:
 Usuario: ${input.message}`;    try {
       // Array para rastrear herramientas usadas
-      const toolsUsed: string[] = [];
+      const allToolsUsed: string[] = [];
       
       // Override console.log temporalmente para capturar tool executions
       const originalLog = console.log;
       console.log = (...args: any[]) => {
         const message = args.join(' ');
-          // Detectar ejecución de herramientas
+        // Detectar ejecución de herramientas
         if (message.includes('🔧 Tool Execution: searchWeb')) {
-          if (!toolsUsed.includes('searchWeb')) {
-            toolsUsed.push('searchWeb');
+          if (!allToolsUsed.includes('searchWeb')) {
+            allToolsUsed.push('searchWeb');
           }
         } else if (message.includes('🔧 Tool Execution: analyzeWeb')) {
-          if (!toolsUsed.includes('analyzeWeb')) {
-            toolsUsed.push('analyzeWeb');
+          if (!allToolsUsed.includes('analyzeWeb')) {
+            allToolsUsed.push('analyzeWeb');
           }
         } else if (message.includes('🔧 Tool Execution: analyzeDocument')) {
-          if (!toolsUsed.includes('analyzeDocument')) {
-            toolsUsed.push('analyzeDocument');
+          if (!allToolsUsed.includes('analyzeDocument')) {
+            allToolsUsed.push('analyzeDocument');
+          }
+        } else if (message.includes('🔧 Tool Execution: listGoogleCalendarEvents')) {
+          if (!allToolsUsed.includes('listGoogleCalendarEvents')) {
+            allToolsUsed.push('listGoogleCalendarEvents');
+          }
+        } else if (message.includes('🔧 Tool Execution: createGoogleCalendarEvent')) {
+          if (!allToolsUsed.includes('createGoogleCalendarEvent')) {
+            allToolsUsed.push('createGoogleCalendarEvent');
+          }
+        } else if (message.includes('🔧 Tool Execution: updateGoogleCalendarEvent')) {
+          if (!allToolsUsed.includes('updateGoogleCalendarEvent')) {
+            allToolsUsed.push('updateGoogleCalendarEvent');
+          }
+        } else if (message.includes('🔧 Tool Execution: deleteGoogleCalendarEvent')) {
+          if (!allToolsUsed.includes('deleteGoogleCalendarEvent')) {
+            allToolsUsed.push('deleteGoogleCalendarEvent');
           }
         }
         
@@ -518,7 +948,7 @@ Usuario: ${input.message}`;    try {
         const result = await ai.generate({
         model: claude35Sonnet,
         prompt: fullPrompt,
-        tools: [searchWebTool, analyzeWebTool, analyzeDocumentTool],
+        tools: availableTools,
         config: {
           temperature: 0.7,
           maxOutputTokens: 4000
@@ -531,12 +961,12 @@ Usuario: ${input.message}`;    try {
       console.log('✅ Chat Flow Completed:', { 
         responseLength: result.text?.length || 0,
         hasResponse: !!result.text,
-        toolsUsed: toolsUsed
+        allToolsUsed: allToolsUsed
       });
 
       return {
         response: result.text || 'Lo siento, no pude generar una respuesta.',
-        toolsUsed: toolsUsed,
+        allToolsUsed: allToolsUsed,
         timestamp: new Date().toISOString()
       };
 
@@ -545,7 +975,7 @@ Usuario: ${input.message}`;    try {
       
       return {
         response: `Lo siento, ocurrió un error al procesar tu mensaje. Por favor, inténtalo de nuevo. Error: ${error.message}`,
-        toolsUsed: [],
+        allToolsUsed: [],
         timestamp: new Date().toISOString()
       };
     }
@@ -563,12 +993,18 @@ app.use(cors({
 
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-
-// Health check endpoint
 app.get('/health', (req: any, res: any) => {  res.json({ 
     status: 'healthy', 
     model: 'Claude 3.5 Sonnet',
-    tools: ['searchWeb', 'analyzeWeb', 'analyzeDocument'],
+    tools: [
+      searchWebTool.name, 
+      analyzeWebTool.name, 
+      analyzeDocumentTool.name, 
+      listGoogleCalendarEventsTool.name, 
+      createGoogleCalendarEventTool.name, 
+      updateGoogleCalendarEventTool.name, 
+      deleteGoogleCalendarEventTool.name
+    ],
     timestamp: new Date().toISOString()
   });
 });
@@ -578,15 +1014,29 @@ app.post('/chatFlow', async (req: any, res: any) => {
   try {
     console.log('📥 Chat request received:', req.body);
     
-    const { message, conversationHistory, documents } = req.body;
+    const { userId, message, conversationHistory = [], documents = [], accessToken = '' } = req.body;
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
     let enhancedMessage = message;
-    let toolsUsed: string[] = [];
     let documentContext = '';
+    
+    // Variable para rastrear herramientas usadas
+    let toolsUsed: string[] = [];
+    
+    // Llamar al flujo de chat pasando el mensaje, la conversación y el accessToken
+    const result = await chatFlow({
+      message: enhancedMessage || message,
+      conversationHistory: conversationHistory,
+      accessToken: accessToken || undefined
+    });
+    
+    // Capturar las herramientas usadas del resultado
+    if (result.allToolsUsed && Array.isArray(result.allToolsUsed)) {
+      toolsUsed = [...result.allToolsUsed];
+    }
 
     // Process documents if provided
     if (documents && Array.isArray(documents) && documents.length > 0) {
@@ -673,22 +1123,76 @@ Por favor, proporciona una respuesta basada principalmente en la información de
     });
 
     // Execute the chat flow with enhanced message but without document tools to avoid duplication
-    const result = await ai.generate({
+    const fullPrompt = `Eres Agent Hums, un asistente AI avanzado desarrollado con Angular 20 y Claude 3.5 Sonnet. 
+
+PERSONALIDAD:
+- Amigable, profesional y servicial
+- Experto en tecnología, desarrollo y temas generales
+- Proactivo en el uso de herramientas cuando es necesario
+- Respuestas concisas pero completas
+
+CAPACIDADES:
+- Conversación general inteligente
+- Búsqueda web en tiempo real (searchWeb)
+- Análisis profundo de información web (analyzeWeb)
+- Análisis de documentos PDF (analyzeDocument)
+- Integración con Google Calendar (listGoogleCalendarEvents, createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent)
+
+INSTRUCCIONES DE USO DE HERRAMIENTAS:
+- USA searchWeb cuando necesites información actualizada, datos recientes, noticias, precios, eventos actuales
+- USA analyzeWeb para investigaciones más profundas que requieren múltiples búsquedas y análisis
+- USA analyzeDocument cuando el usuario envíe documentos PDF para analizar su contenido
+- USA listGoogleCalendarEvents para obtener eventos del calendario de Google
+- USA createGoogleCalendarEvent para crear eventos en el calendario de Google
+- USA updateGoogleCalendarEvent para actualizar eventos en el calendario de Google
+- USA deleteGoogleCalendarEvent para eliminar eventos del calendario de Google
+- NO uses herramientas para preguntas generales que puedes responder con tu conocimiento
+- Siempre explica qué herramienta vas a usar y por qué
+
+FORMATO DE RESPUESTA:
+- Menciona si usaste herramientas para obtener información
+- Cita fuentes cuando sea relevante
+- Mantén un tono conversacional y natural
+
+Fecha actual: ${new Date().toLocaleDateString('es-MX')}
+
+${documentContext ? `CONVERSACIÓN PREVIA:\n${documentContext}\n\n` : ''}MENSAJE ACTUAL:
+Usuario: ${message}`;
+
+    // Lista de herramientas disponibles para Claude 3.5 Sonnet
+    const chatAvailableTools = [
+      searchWebTool,
+      analyzeWebTool,
+      analyzeDocumentTool,
+      listGoogleCalendarEventsTool,
+      createGoogleCalendarEventTool,
+      updateGoogleCalendarEventTool,
+      deleteGoogleCalendarEventTool
+    ];
+
+    const chatResult = await ai.generate({
       model: claude35Sonnet,
-      prompt: enhancedMessage,
-      tools: documents && documents.length > 0 ? [searchWebTool] : [searchWebTool, analyzeDocumentTool], // Only include doc tool if no docs were pre-processed
+      prompt: fullPrompt,
+      tools: chatAvailableTools,
       config: {
         temperature: 0.7,
         maxOutputTokens: 2048
       }
     });
 
-    // Merge tools used from document analysis and chat generation
-    const allToolsUsed = [...new Set([...toolsUsed])];
-
+    // No es necesario crear un nuevo array, usamos el que ya tenemos
+    
+    // Crear historial actualizado con el mensaje del usuario y la respuesta del asistente
+    const updatedConversationHistory = [
+      ...(conversationHistory || []),
+      { role: 'user', content: message },
+      { role: 'assistant', content: chatResult.text || 'Lo siento, no pude generar una respuesta.' }
+    ];
+    
     return res.json({
-      response: result.text || 'Lo siento, no pude generar una respuesta.',
-      toolsUsed: allToolsUsed,
+      response: chatResult.text || 'Lo siento, no pude generar una respuesta.',
+      allToolsUsed: toolsUsed,
+      conversationHistory: updatedConversationHistory,
       timestamp: new Date().toISOString()
     });
   } catch (error: any) {
@@ -705,4 +1209,6 @@ app.listen(PORT, () => {
   console.log(`✅ Agent Hums Server running on port ${PORT}`);
   console.log(`🔗 Chat endpoint: http://localhost:${PORT}/chatFlow`);
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
+  console.log('🚀 Server started successfully.');
+  console.log('📅 Google Calendar herramientas integradas correctamente.');
 });

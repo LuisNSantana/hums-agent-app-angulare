@@ -1,0 +1,326 @@
+// Estilos para la página de integraciones
+// Adaptado para usar variables globales del tema oscuro (--mat-app-...)
+
+:host {
+  display: block; 
+  height: 100%;   
+  background-color: var(--mat-app-background);
+  color: var(--mat-app-on-surface);
+}
+
+.integrations-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  height: 100%; 
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto; 
+  box-sizing: border-box; 
+}
+
+// Estilos para el encabezado de la página
+.page-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid var(--mat-app-border);
+
+  h1 {
+    font-size: 1.8rem;
+    font-weight: 600;
+    margin: 0;
+    color: var(--mat-app-on-surface);
+    flex-grow: 1;
+  }
+
+  .back-button {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    margin-right: 1rem;
+    background-color: transparent;
+    border: 1px solid var(--mat-app-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    color: var(--mat-app-primary);
+    font-weight: 500;
+    
+    mat-icon {
+      margin-right: 0.5rem;
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+    
+    &:hover {
+      background-color: rgba(var(--mat-app-primary-rgb), 0.08); // Usar --mat-app-primary-rgb si existe, o ajustar
+    }
+  }
+}
+
+// Contenedor principal para las tarjetas de integración
+.integrations-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  flex-grow: 1;
+}
+
+// Sección de introducción
+.section-intro {
+  margin-bottom: 1rem;
+  
+  h2 {
+    font-size: 1.5rem;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: var(--mat-app-on-surface);
+  }
+  
+  p {
+    font-size: 1rem;
+    color: var(--mat-app-text-secondary);
+    line-height: 1.5;
+  }
+}
+
+// Estilos para cada tarjeta de integración
+.integration-card {
+  background-color: var(--mat-app-surface); 
+  border-radius: 8px;
+  box-shadow: var(--mat-app-shadow); 
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+  border: 1px solid var(--mat-app-border);
+  
+  &.connected {
+    border-left: 4px solid var(--mat-app-success);
+  }
+  
+  &.coming-soon {
+    opacity: 0.7;
+  }
+}
+
+// Encabezado dentro de cada tarjeta
+.integration-header {
+  display: flex;
+  align-items: center;
+  margin-bottom: 1.25rem;
+  
+  .integration-logo {
+    width: 48px;
+    height: 48px;
+    // Idealmente, --mat-app-primary-rgb estaría definido para usar con rgba
+    background-color: rgba(var(--mat-app-primary-rgb, 99, 102, 241), 0.1); 
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    
+    mat-icon {
+      font-size: 24px;
+      color: var(--mat-app-primary);
+    }
+  }
+  
+  .integration-title {
+    flex-grow: 1;
+    
+    h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin: 0 0 0.25rem 0;
+      color: var(--mat-app-on-surface);
+    }
+  }
+}
+
+// Indicador de estado
+.status-indicator {
+  display: flex;
+  align-items: center;
+  
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--mat-app-error); 
+    margin-right: 0.5rem;
+    
+    &.connected {
+      background-color: var(--mat-app-success);
+    }
+  }
+  
+  .status-text {
+    font-size: 0.875rem;
+    color: var(--mat-app-text-secondary);
+    
+    &.coming-soon {
+      color: var(--mat-app-warning);
+      font-weight: 500;
+    }
+  }
+}
+
+// Cuerpo de la tarjeta
+.integration-body {
+  margin-bottom: 1.5rem;
+  
+  p {
+    font-size: 0.95rem;
+    color: var(--mat-app-on-surface);
+    line-height: 1.6;
+    margin-bottom: 1rem;
+  }
+}
+
+// Lista de características
+.integration-features {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 1rem 0;
+  
+  .feature {
+    display: flex;
+    align-items: center;
+    background-color: var(--mat-app-surface-container); 
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    color: var(--mat-app-text-secondary);
+    
+    mat-icon {
+      font-size: 16px;
+      height: 16px;
+      width: 16px;
+      margin-right: 0.5rem;
+      color: var(--mat-app-primary);
+    }
+  }
+}
+
+// Acciones de la tarjeta
+.integration-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: 1rem;
+  
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    font-weight: 500;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    
+    mat-icon {
+      margin-right: 0.5rem;
+      font-size: 18px;
+      height: 18px;
+      width: 18px;
+    }
+  }
+  
+  .connect-button {
+    background-color: var(--mat-app-primary);
+    color: var(--mat-app-on-primary);
+    border: none;
+    
+    &:hover {
+      background-color: var(--mat-app-primary-dark); // O --mat-app-primary-hover si existe
+    }
+    
+    &.disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+      background-color: var(--mat-app-surface-variant);
+      color: var(--mat-app-on-surface-muted);
+    }
+  }
+  
+  .disconnect-button {
+    background-color: transparent;
+    color: var(--mat-app-error);
+    border: 1px solid var(--mat-app-error);
+    
+    &:hover {
+      // Idealmente, --mat-app-error-rgb estaría definido para usar con rgba
+      background-color: rgba(var(--mat-app-error-rgb, 239, 68, 68), 0.1); 
+    }
+  }
+}
+
+// Mensajes de error
+.error-message {
+  color: var(--mat-app-error);
+  font-size: 0.9rem;
+  margin-top: 1rem;
+  padding: 0.75rem;
+  border-radius: 4px;
+  // Idealmente, --mat-app-error-rgb estaría definido para usar con rgba
+  background-color: rgba(var(--mat-app-error-rgb, 239, 68, 68), 0.1);
+  border-left: 3px solid var(--mat-app-error);
+}
+
+// Estado de carga (spinner)
+.loading-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  
+  .spinner {
+    margin-bottom: 1rem;
+    // Asegúrate de que el spinner use colores del tema si es un componente de Material
+  }
+  
+  .loading-text {
+    color: var(--mat-app-text-secondary);
+    font-size: 0.9rem;
+  }
+}
+
+// Responsividad
+@media (max-width: 768px) {
+  .integrations-page {
+    padding: 1rem;
+  }
+  
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    
+    .back-button {
+      margin-bottom: 1rem;
+    }
+    
+    h1 {
+      font-size: 1.5rem;
+    }
+  }
+  
+  .integration-header {
+    flex-direction: column;
+    align-items: flex-start;
+    
+    .integration-logo {
+      margin-bottom: 1rem;
+    }
+  }
+  
+  .integration-actions {
+    justify-content: flex-start;
+  }
+}
