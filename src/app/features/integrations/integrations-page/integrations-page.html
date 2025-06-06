@@ -64,8 +64,8 @@
       </div>
     </div>
 
-    <!-- Google Drive Integration Card (para futura implementación) -->
-    <div class="integration-card coming-soon">
+    <!-- Google Drive Integration Card -->
+    <div class="integration-card" [class.connected]="googleDriveConnected()">
       <div class="integration-header">
         <div class="integration-logo">
           <mat-icon>cloud</mat-icon>
@@ -73,7 +73,8 @@
         <div class="integration-title">
           <h3>Google Drive</h3>
           <div class="status-indicator">
-            <span class="status-text coming-soon">Coming Soon</span>
+            <span class="status-dot" [class.connected]="googleDriveConnected()"></span>
+            <span class="status-text">{{ googleDriveConnected() ? 'Connected' : 'Not Connected' }}</span>
           </div>
         </div>
       </div>
@@ -98,10 +99,17 @@
       </div>
 
       <div class="integration-actions">
-        <button class="connect-button disabled">
-          <mat-icon>hourglass_empty</mat-icon>
-          Coming Soon
-        </button>
+        @if (googleDriveConnected()) {
+          <button class="disconnect-button" (click)="disconnectGoogleDrive()">
+            <mat-icon>link_off</mat-icon>
+            Disconnect
+          </button>
+        } @else {
+          <button class="connect-button" (click)="connectGoogleDrive()">
+            <mat-icon>add_link</mat-icon>
+            Connect Google Drive
+          </button>
+        }
       </div>
     </div>
 

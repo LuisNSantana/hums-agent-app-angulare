@@ -34,6 +34,12 @@ export interface GoogleCalendarTokens {
   expires_at?: number;
 }
 
+export interface GoogleDriveTokens {
+  access_token: string;
+  refresh_token?: string;
+  expires_at?: number;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -689,5 +695,186 @@ export class IntegrationsService {
       console.error(`Error refreshing ${type} token:`, error);
       return null;
     }
+  }
+
+  /**
+   * Get Google Drive OAuth token for the current user
+   * @returns Observable with the access token or null if not available
+   */
+  getGoogleDriveToken(): Observable<string | null> {
+    // Get current authenticated user from AuthStateService
+    const authUser = this.authStateService.getCurrentUser();
+    const userId = authUser?.id || null;
+    console.log('[IntegrationsService] 🔍 Obteniendo token de Google Drive para userId:', userId);
+    
+    if (!userId) {
+      console.warn('[IntegrationsService] ⚠️ No authenticated user when requesting Google Drive token');
+      return of(null);
+    }
+    
+    // Obtener los tokens de OAuth para Google Drive
+    return from(this.fetchGoogleDriveTokens(userId)).pipe(
+      map(tokens => {
+        console.log('[IntegrationsService] ℹ️ Tokens recuperados:', tokens ? 'Datos disponibles' : 'No hay datos');
+        
+        if (!tokens || !tokens.access_token) {
+          console.warn('[IntegrationsService] ⚠️ No Google Drive access token found');
+          return null;
+        }
+        
+        // Check if token is expired (if we have expiry info)
+        if (tokens.expires_at && Date.now() > tokens.expires_at) {
+          console.warn('[IntegrationsService] ⚠️ Google Drive token is expired. Expiry:', 
+            new Date(tokens.expires_at).toISOString(), 'Current time:', new Date().toISOString());
+          // Todo: implement refresh token flow
+          return null;
+        }
+        
+        console.log('[IntegrationsService] ✅ Google Drive token retrieved successfully');
+        return tokens.access_token;
+      }),
+      catchError(err => {
+        console.error('[IntegrationsService] ❌ Error getting Google Drive token:', err);
+        return of(null);
+      })
+    );
+  }
+  
+  /**
+   * Fetch Google Drive tokens from database
+   * @param userId The user ID to fetch tokens for
+   * @returns Promise with Google Drive tokens or null
+   */
+  private async fetchGoogleDriveTokens(userId: string): Promise<GoogleDriveTokens | null> {
+    try {
+      console.log('[IntegrationsService] 🔎 Consultando tokens de Google Drive para userId:', userId);
+      
+      // Usar la tabla user_integrations que ya existe con campos específicos para Google Drive
+      const { data, error } = await this.supabase
+        .from('user_integrations')
+        .select('google_drive_token, google_drive_refresh_token, google_drive_token_expiry, google_drive_connected')
+        .eq('user_id', userId)
+        .maybeSingle();
+      
+      if (error) {
+        console.error('[IntegrationsService] 🚨 Error fetching Google Drive tokens:', error);
+        return null;
+      }
+      
+      // Mostrar información detallada para depuración
+      console.log('[IntegrationsService] 💾 Datos obtenidos:', {
+        tieneResultados: !!data,
+        conectado: data?.google_drive_connected ? 'Sí' : 'No',
+        tieneToken: !!data?.google_drive_token,
+        tieneRefreshToken: !!data?.google_drive_refresh_token,
+        tieneExpiracion: !!data?.google_drive_token_expiry,
+        expiracion: data?.google_drive_token_expiry ? new Date(data.google_drive_token_expiry).toISOString() : 'No disponible',
+        horaActual: new Date().toISOString(),
+        expirado: data?.google_drive_token_expiry ? new Date(data.google_drive_token_expiry) < new Date() : false
+      });
+      
+      // Verificar que existan datos y que la integración esté conectada
+      if (!data || !data.google_drive_token || !data.google_drive_connected) {
+        console.warn('[IntegrationsService] ⚠️ No Google Drive tokens found for user or integration not connected');
+        return null;
+      }
+      
+      // Verificar si el token ha expirado
+      const tokenExpiry = data.google_drive_token_expiry ? new Date(data.google_drive_token_expiry).getTime() : null;
+      if (tokenExpiry && tokenExpiry < Date.now()) {
+        console.warn('[IntegrationsService] ⚠️ Google Drive token expirado. Expiración:', 
+          new Date(tokenExpiry).toISOString(), 'Hora actual:', new Date().toISOString());
+        
+        if (data.google_drive_refresh_token) {
+          console.log('[IntegrationsService] ⏳ Intentando refrescar token usando refresh_token...');
+          const refreshedTokens = await this.refreshGoogleDriveToken(userId, data.google_drive_refresh_token);
+          if (refreshedTokens) {
+            console.log('[IntegrationsService] ✅ Token refrescado exitosamente durante la obtención.');
+            return refreshedTokens;
+          } else {
+            console.warn('[IntegrationsService] ❌ Falló el intento de refrescar el token.');
+            // Si el refresco falla, se devuelve null para indicar que no hay token válido
+            return null;
+          }
+        } else {
+          console.warn('[IntegrationsService] ⚠️ No hay refresh_token disponible para refrescar el token expirado.');
+          return null;
+        }
+      }
+      
+      // Mapear los campos de la tabla user_integrations a nuestra interfaz GoogleDriveTokens
+      const result = {
+        access_token: data.google_drive_token,
+        refresh_token: data.google_drive_refresh_token,
+        expires_at: tokenExpiry ? tokenExpiry : undefined // tokenExpiry ya es un timestamp (number) o null
+      };
+      
+      console.log('[IntegrationsService] ✅ Tokens recuperados correctamente');
+      return result;
+    } catch (err) {
+      console.error('[IntegrationsService] 🚨 Exception fetching Google Drive tokens:', err);
+      return null;
+    }
+  }
+
+  /**
+   * Refresh Google Drive token
+   */
+  private async refreshGoogleDriveToken(userId: string, refreshToken: string): Promise<GoogleDriveTokens | null> {
+    console.log('[IntegrationsService] 🔄 Intentando refrescar token de Google Drive para userId:', userId);
+    try {
+      const response = await firstValueFrom(
+        this.http.post<OAuthTokenResponse>('https://oauth2.googleapis.com/token', {
+          client_id: environment.googleClientId,
+          client_secret: environment.googleClientSecret,
+          refresh_token: refreshToken,
+          grant_type: 'refresh_token',
+        })
+      );
+
+      if (response && response.access_token && response.expires_in) {
+        const newAccessToken = response.access_token;
+        const expiresInSeconds = response.expires_in;
+        const newExpiresAt = Date.now() + expiresInSeconds * 1000;
+
+        console.log('[IntegrationsService] ✨ Nuevo token de acceso obtenido. Expiración en:', new Date(newExpiresAt).toISOString());
+
+        // Actualizar en Supabase
+        const { error: updateError } = await this.supabase
+          .from('user_integrations')
+          .update({
+            google_drive_token: newAccessToken,
+            google_drive_token_expiry: new Date(newExpiresAt).toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq('user_id', userId);
+
+        if (updateError) {
+          console.error('[IntegrationsService] 🚨 Error al actualizar token refrescado en Supabase:', updateError);
+          // No devolver el token si no se pudo guardar, para forzar una nueva autenticación si es necesario
+          return null;
+        }
+
+        console.log('[IntegrationsService] ✅ Token refrescado y actualizado en Supabase');
+        return {
+          access_token: newAccessToken,
+          refresh_token: refreshToken, // El refresh token original sigue siendo válido
+          expires_at: newExpiresAt,
+        };
+      } else {
+        console.error('[IntegrationsService] ❌ Respuesta inesperada del servidor de OAuth al refrescar token:', response);
+        return null;
+      }
+    } catch (error) {
+      console.error('[IntegrationsService] 💥 Excepción al refrescar token de Google Drive:', error);
+      // Si el refresh token es inválido (e.g., revocado), Google devuelve un error (usualmente 400 o 401)
+      // En este caso, podríamos necesitar marcar la integración como desconectada o pedir al usuario que se reautentique.
+      // Por ahora, solo devolvemos null.
+      return null;
+    }
+  }
+
+  isGoogleDriveConnected(): boolean {
+    return this.integrationStatusSubject.value.googleDriveConnected;
   }
 }

@@ -823,6 +823,358 @@ const deleteGoogleCalendarEventTool = ai.defineTool(
   }
 );
 
+// 📁 Google Drive Tools
+
+// Schema y definición para uploadGoogleDriveFileTool
+const uploadGoogleDriveFileSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  fileName: z.string().describe('Nombre del archivo a subir'),
+  fileContent: z.string().describe('Contenido del archivo codificado en base64'),
+  mimeType: z.string().describe('Tipo MIME del archivo'),
+  folderId: z.string().optional().describe('ID de la carpeta padre (opcional, por defecto root)'),
+  makePublic: z.boolean().default(false).describe('Hacer el archivo público')
+});
+
+const uploadGoogleDriveFileTool = ai.defineTool(
+  {
+    name: 'uploadGoogleDriveFile',
+    description: 'Sube un archivo a Google Drive con las opciones especificadas.',
+    inputSchema: uploadGoogleDriveFileSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      fileId: z.string().optional(),
+      fileName: z.string().optional(),
+      webViewLink: z.string().optional(),
+      size: z.number().optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof uploadGoogleDriveFileSchema>) => {
+    console.log('🔧 Tool Execution: uploadGoogleDriveFile', { 
+      fileName: input.fileName, 
+      mimeType: input.mimeType, 
+      hasAccessToken: !!input.accessToken 
+    });
+    
+    try {
+      if (!input.accessToken) {
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Drive esté conectado en la sección de integraciones.');
+      }
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+      const drive = google.drive({ version: 'v3', auth });
+
+      // Decode base64 content
+      const buffer = Buffer.from(input.fileContent, 'base64');
+
+      const fileMetadata = {
+        name: input.fileName,
+        parents: input.folderId ? [input.folderId] : undefined,
+      };
+
+      const media = {
+        mimeType: input.mimeType,
+        body: buffer,
+      };
+
+      const response = await drive.files.create({
+        requestBody: fileMetadata,
+        media: media,
+        fields: 'id,name,webViewLink,size',
+      });
+
+      const file = response.data;
+
+      // Make public if requested
+      if (input.makePublic && file.id) {
+        await drive.permissions.create({
+          fileId: file.id,
+          requestBody: {
+            role: 'reader',
+            type: 'anyone',
+          },
+        });
+      }
+
+      return {
+        success: true,
+        fileId: file.id || undefined,
+        fileName: file.name || undefined,
+        webViewLink: file.webViewLink || undefined,
+        size: file.size ? parseInt(file.size) : undefined,
+      };
+    } catch (error: any) {
+      console.error('❌ Google Drive Upload Error:', error.message);
+      
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para subir archivos a Google Drive.' };
+      }
+      
+      return { success: false, error: `Error al subir archivo: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para listGoogleDriveFilesTool
+const listGoogleDriveFilesSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  query: z.string().optional().describe('Consulta de búsqueda para filtrar archivos'),
+  maxResults: z.number().optional().default(10).describe('Número máximo de archivos a retornar'),
+  orderBy: z.enum(['name', 'modifiedTime', 'createdTime', 'size']).default('modifiedTime').describe('Campo por el cual ordenar'),
+  mimeType: z.string().optional().describe('Filtrar por tipo MIME específico'),
+  folderId: z.string().optional().describe('Buscar dentro de una carpeta específica')
+});
+
+const listGoogleDriveFilesTool = ai.defineTool(
+  {
+    name: 'listGoogleDriveFiles',
+    description: 'Lista archivos de Google Drive con filtros y opciones de búsqueda.',
+    inputSchema: listGoogleDriveFilesSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      files: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        mimeType: z.string(),
+        size: z.number().optional(),
+        modifiedTime: z.string().optional(),
+        webViewLink: z.string().optional(),
+        shared: z.boolean().optional()
+      })).optional(),
+      totalFiles: z.number().optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof listGoogleDriveFilesSchema>) => {
+    console.log('🔧 Tool Execution: listGoogleDriveFiles', { 
+      query: input.query,
+      maxResults: input.maxResults,
+      hasAccessToken: !!input.accessToken 
+    });
+    
+    try {
+      if (!input.accessToken) {
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Drive esté conectado en la sección de integraciones.');
+      }
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+      const drive = google.drive({ version: 'v3', auth });
+
+      // Build query string
+      let query = '';
+      const queryParts: string[] = [];
+
+      if (input.query) {
+        queryParts.push(`name contains '${input.query}' or fullText contains '${input.query}'`);
+      }
+      if (input.mimeType) {
+        queryParts.push(`mimeType='${input.mimeType}'`);
+      }
+      if (input.folderId) {
+        queryParts.push(`'${input.folderId}' in parents`);
+      }
+      queryParts.push('trashed=false');
+
+      query = queryParts.join(' and ');
+
+      const response = await drive.files.list({
+        q: query,
+        pageSize: input.maxResults,
+        orderBy: input.orderBy === 'size' ? 'quotaBytesUsed desc' : input.orderBy,
+        fields: 'files(id,name,mimeType,size,modifiedTime,webViewLink,shared)',
+      });
+
+      const files = response.data.files || [];
+
+      return {
+        success: true,
+        files: files.map((file: any) => ({
+          id: file.id,
+          name: file.name,
+          mimeType: file.mimeType,
+          size: file.size ? parseInt(file.size) : undefined,
+          modifiedTime: file.modifiedTime,
+          webViewLink: file.webViewLink,
+          shared: file.shared || false,
+        })),
+        totalFiles: files.length,
+      };
+    } catch (error: any) {
+      console.error('❌ Google Drive List Error:', error.message);
+      
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para acceder a Google Drive.' };
+      }
+      
+      return { success: false, error: `Error al listar archivos: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para shareGoogleDriveFileTool
+const shareGoogleDriveFileSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  fileId: z.string().describe('ID del archivo de Google Drive a compartir'),
+  email: z.string().email().optional().describe('Email del usuario con quien compartir'),
+  role: z.enum(['reader', 'writer', 'commenter']).default('reader').describe('Rol de permisos'),
+  makePublic: z.boolean().default(false).describe('Hacer el archivo público')
+});
+
+const shareGoogleDriveFileTool = ai.defineTool(
+  {
+    name: 'shareGoogleDriveFile',
+    description: 'Comparte un archivo de Google Drive con usuarios específicos o lo hace público.',
+    inputSchema: shareGoogleDriveFileSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      permissionId: z.string().optional(),
+      sharedLink: z.string().optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof shareGoogleDriveFileSchema>) => {
+    console.log('🔧 Tool Execution: shareGoogleDriveFile', { 
+      fileId: input.fileId,
+      email: input.email,
+      role: input.role,
+      makePublic: input.makePublic,
+      hasAccessToken: !!input.accessToken 
+    });
+    
+    try {
+      if (!input.accessToken) {
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Drive esté conectado en la sección de integraciones.');
+      }
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+      const drive = google.drive({ version: 'v3', auth });
+
+      let permissionResource: any;
+
+      if (input.makePublic) {
+        permissionResource = {
+          role: 'reader',
+          type: 'anyone',
+        };
+      } else if (input.email) {
+        permissionResource = {
+          role: input.role,
+          type: 'user',
+          emailAddress: input.email,
+        };
+      } else {
+        throw new Error('Se debe especificar un email o hacer el archivo público');
+      }
+
+      const response = await drive.permissions.create({
+        fileId: input.fileId,
+        requestBody: permissionResource,
+        fields: 'id',
+      });
+
+      // Get the shareable link
+      const fileResponse = await drive.files.get({
+        fileId: input.fileId,
+        fields: 'webViewLink',
+      });
+
+      return {
+        success: true,
+        permissionId: response.data.id || undefined,
+        sharedLink: fileResponse.data.webViewLink || undefined,
+      };
+    } catch (error: any) {
+      console.error('❌ Google Drive Share Error:', error.message);
+      
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para compartir archivos en Google Drive.' };
+      } else if (error.code === 404) {
+        return { success: false, error: 'Error: Archivo no encontrado.' };
+      }
+      
+      return { success: false, error: `Error al compartir archivo: ${error.message}` };
+    }
+  }
+);
+
+// Schema y definición para createGoogleDriveFolderTool
+const createGoogleDriveFolderSchema = z.object({
+  accessToken: z.string().describe('Token de acceso OAuth 2.0 de Google'),
+  name: z.string().describe('Nombre de la carpeta a crear'),
+  parentFolderId: z.string().optional().describe('ID de la carpeta padre (opcional, por defecto root)')
+});
+
+const createGoogleDriveFolderTool = ai.defineTool(
+  {
+    name: 'createGoogleDriveFolder',
+    description: 'Crea una nueva carpeta en Google Drive.',
+    inputSchema: createGoogleDriveFolderSchema,
+    outputSchema: z.object({
+      success: z.boolean(),
+      folderId: z.string().optional(),
+      folderName: z.string().optional(),
+      webViewLink: z.string().optional(),
+      error: z.string().optional()
+    })
+  },
+  async (input: z.infer<typeof createGoogleDriveFolderSchema>) => {
+    console.log('🔧 Tool Execution: createGoogleDriveFolder', { 
+      name: input.name,
+      parentFolderId: input.parentFolderId,
+      hasAccessToken: !!input.accessToken 
+    });
+    
+    try {
+      if (!input.accessToken) {
+        throw new Error('Se requiere un token de acceso OAuth de Google. Por favor verifica que Google Drive esté conectado en la sección de integraciones.');
+      }
+
+      const auth = new google.auth.OAuth2();
+      auth.setCredentials({ access_token: input.accessToken });
+      const drive = google.drive({ version: 'v3', auth });
+
+      const fileMetadata = {
+        name: input.name,
+        parents: input.parentFolderId ? [input.parentFolderId] : undefined,
+        mimeType: 'application/vnd.google-apps.folder',
+      };
+
+      const response = await drive.files.create({
+        requestBody: fileMetadata,
+        fields: 'id,name,webViewLink',
+      });
+
+      const folder = response.data;
+
+      return {
+        success: true,
+        folderId: folder.id || undefined,
+        folderName: folder.name || undefined,
+        webViewLink: folder.webViewLink || undefined,
+      };
+    } catch (error: any) {
+      console.error('❌ Google Drive Create Folder Error:', error.message);
+      
+      if (error.code === 401) {
+        return { success: false, error: 'Error de autenticación: El token de acceso es inválido o ha expirado.' };
+      } else if (error.code === 403) {
+        return { success: false, error: 'Error de permisos: No tienes autorización para crear carpetas en Google Drive.' };
+      }
+      
+      return { success: false, error: `Error al crear carpeta: ${error.message}` };
+    }
+  }
+);
+
 // 💬 Chat Flow with Claude 3.5 Sonnet
 const chatFlowInputZodSchema = z.object({
   message: z.string().describe('User message'),
@@ -847,7 +1199,11 @@ const availableTools = [
   listGoogleCalendarEventsTool,
   createGoogleCalendarEventTool,
   updateGoogleCalendarEventTool,
-  deleteGoogleCalendarEventTool
+  deleteGoogleCalendarEventTool,
+  uploadGoogleDriveFileTool,
+  listGoogleDriveFilesTool,
+  shareGoogleDriveFileTool,
+  createGoogleDriveFolderTool
 ];
 
 const chatFlow = ai.defineFlow<typeof chatFlowInputZodSchema, typeof chatFlowOutputZodSchema>(
@@ -884,6 +1240,7 @@ CAPACIDADES:
 - Análisis profundo de información web (analyzeWeb)
 - Análisis de documentos PDF (analyzeDocument)
 - Integración con Google Calendar (listGoogleCalendarEvents, createGoogleCalendarEvent, updateGoogleCalendarEvent, deleteGoogleCalendarEvent)
+- Integración con Google Drive (uploadGoogleDriveFile, listGoogleDriveFiles, shareGoogleDriveFile, createGoogleDriveFolder)
 
 INSTRUCCIONES DE USO DE HERRAMIENTAS:
 - USA searchWeb cuando necesites información actualizada, datos recientes, noticias, precios, eventos actuales
@@ -893,6 +1250,10 @@ INSTRUCCIONES DE USO DE HERRAMIENTAS:
 - USA createGoogleCalendarEvent para crear eventos en el calendario de Google
 - USA updateGoogleCalendarEvent para actualizar eventos en el calendario de Google
 - USA deleteGoogleCalendarEvent para eliminar eventos del calendario de Google
+- USA uploadGoogleDriveFile para subir archivos a Google Drive
+- USA listGoogleDriveFiles para obtener archivos de Google Drive
+- USA shareGoogleDriveFile para compartir archivos de Google Drive
+- USA createGoogleDriveFolder para crear carpetas en Google Drive
 - NO uses herramientas para preguntas generales que puedes responder con tu conocimiento
 - Siempre explica qué herramienta vas a usar y por qué
 
@@ -940,6 +1301,22 @@ Usuario: ${input.message}`;    try {
         } else if (message.includes('🔧 Tool Execution: deleteGoogleCalendarEvent')) {
           if (!allToolsUsed.includes('deleteGoogleCalendarEvent')) {
             allToolsUsed.push('deleteGoogleCalendarEvent');
+          }
+        } else if (message.includes('🔧 Tool Execution: uploadGoogleDriveFile')) {
+          if (!allToolsUsed.includes('uploadGoogleDriveFile')) {
+            allToolsUsed.push('uploadGoogleDriveFile');
+          }
+        } else if (message.includes('🔧 Tool Execution: listGoogleDriveFiles')) {
+          if (!allToolsUsed.includes('listGoogleDriveFiles')) {
+            allToolsUsed.push('listGoogleDriveFiles');
+          }
+        } else if (message.includes('🔧 Tool Execution: shareGoogleDriveFile')) {
+          if (!allToolsUsed.includes('shareGoogleDriveFile')) {
+            allToolsUsed.push('shareGoogleDriveFile');
+          }
+        } else if (message.includes('🔧 Tool Execution: createGoogleDriveFolder')) {
+          if (!allToolsUsed.includes('createGoogleDriveFolder')) {
+            allToolsUsed.push('createGoogleDriveFolder');
           }
         }
         
@@ -1004,7 +1381,11 @@ app.get('/health', (req: any, res: any) => {  res.json({
       listGoogleCalendarEventsTool.name, 
       createGoogleCalendarEventTool.name, 
       updateGoogleCalendarEventTool.name, 
-      deleteGoogleCalendarEventTool.name
+      deleteGoogleCalendarEventTool.name,
+      uploadGoogleDriveFileTool.name,
+      listGoogleDriveFilesTool.name,
+      shareGoogleDriveFileTool.name,
+      createGoogleDriveFolderTool.name
     ],
     timestamp: new Date().toISOString()
   });
@@ -1157,7 +1538,11 @@ Por favor, proporciona una respuesta basada principalmente en la información de
       listGoogleCalendarEventsTool,
       createGoogleCalendarEventTool,
       updateGoogleCalendarEventTool,
-      deleteGoogleCalendarEventTool
+      deleteGoogleCalendarEventTool,
+      uploadGoogleDriveFileTool,
+      listGoogleDriveFilesTool,
+      shareGoogleDriveFileTool,
+      createGoogleDriveFolderTool
     ];
 
     const chatResult = await ai.generate({
@@ -1201,4 +1586,5 @@ app.listen(PORT, () => {
   console.log(`🏥 Health check: http://localhost:${PORT}/health`);
   console.log('🚀 Server started successfully.');
   console.log('📅 Google Calendar herramientas integradas correctamente.');
+  console.log('📁 Google Drive herramientas integradas correctamente.');
 });

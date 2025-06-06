@@ -183,35 +183,48 @@ export class ChatService {
           }));
       }
 
-      // Obtener el token de Google Calendar desde el servicio de integraciones
-      console.log('[ChatService] 🔍 Obteniendo token de Google Calendar...');
-      let accessToken: string | null = null;
+      // Obtener los tokens de integración necesarios (Google Calendar y Google Drive)
+      console.log('[ChatService] 🔍 Obteniendo tokens de integración...');
+      let calendarToken: string | null = null;
+      let driveToken: string | null = null;
+      
       try {
-        // Verificar usuario autenticado antes de obtener token de Google Calendar
+        // Verificar usuario autenticado antes de obtener tokens
         const authUser = this.authStateService.getCurrentUser();
-        console.log('[ChatService] 👤 Usuario autenticado para token:', authUser?.id ?? 'ninguno');
+        console.log('[ChatService] 👤 Usuario autenticado para tokens:', authUser?.id ?? 'ninguno');
         
         if (!authUser) {
-          console.warn('[ChatService] ⚠️ No hay usuario autenticado para obtener token de Google Calendar');
+          console.warn('[ChatService] ⚠️ No hay usuario autenticado para obtener tokens');
         } else {
-          // Usar firstValueFrom para convertir el Observable a una promesa
-          accessToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
+          // Obtener token de Google Calendar
+          calendarToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
           console.log('[ChatService] 🔑 Token de Google Calendar obtenido:', 
-            accessToken ? '✅ Token disponible' : '❌ Token no disponible');
+            calendarToken ? '✅ Token disponible' : '❌ Token no disponible');
           
-          if (!accessToken) {
-            // Intenta forzar una segunda consulta con un pequeño retraso por si acaso
-            console.log('[ChatService] ⏳ Intentando obtener token nuevamente...');
-            await new Promise(resolve => setTimeout(resolve, 100));
-            accessToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
-            console.log('[ChatService] 🔑 Segundo intento para token:', 
-              accessToken ? '✅ Token disponible' : '❌ Token no disponible');
+          // Obtener token de Google Drive
+          driveToken = await firstValueFrom(this.integrationsService.getGoogleDriveToken());
+          console.log('[ChatService] 🔑 Token de Google Drive obtenido:', 
+            driveToken ? '✅ Token disponible' : '❌ Token no disponible');
+          
+          // Si el mensaje contiene palabras clave relacionadas con Google Drive,
+          // priorizar el token de Drive sobre el de Calendar
+          const isDriveRelatedMessage = request.message.toLowerCase().includes('drive') || 
+                                        request.message.toLowerCase().includes('archivo') || 
+                                        request.message.toLowerCase().includes('file') || 
+                                        request.message.toLowerCase().includes('folder');
+          
+          if (isDriveRelatedMessage && driveToken) {
+            console.log('[ChatService] 🔄 Mensaje relacionado con Drive detectado, priorizando token de Drive');
+            // Usaremos el token de Drive como token principal
           }
         }
       } catch (error) {
-        console.warn('[ChatService] ⚠️ Error al obtener token de Google Calendar:', error);
-        // Continuar sin token, el servidor manejará la ausencia
+        console.warn('[ChatService] ⚠️ Error al obtener tokens de integración:', error);
+        // Continuar sin tokens, el servidor manejará la ausencia
       }
+      
+      // Determinar qué token usar como principal (priorizar Drive si el mensaje es sobre archivos)
+      const accessToken = driveToken || calendarToken;
 
       // Preparar el payload para enviar al servidor
       const claudeRequest = {

@@ -19,6 +19,7 @@ export class IntegrationsPage implements OnInit, OnDestroy {
   private statusSubscription: Subscription | undefined;
 
   readonly googleCalendarConnected = signal<boolean>(false);
+  readonly googleDriveConnected = signal<boolean>(false);
   readonly isLoading = signal<boolean>(true);
   readonly isConnecting = signal<boolean>(false);
   readonly isDisconnecting = signal<boolean>(false);
@@ -35,6 +36,7 @@ export class IntegrationsPage implements OnInit, OnDestroy {
     this.statusSubscription = this.integrationsService.integrationStatus$.subscribe({
       next: (status: IntegrationStatus) => {
         this.googleCalendarConnected.set(status.googleCalendarConnected);
+        this.googleDriveConnected.set(status.googleDriveConnected);
         this.isLoading.set(false);
       },
       error: (err) => {
@@ -97,6 +99,57 @@ export class IntegrationsPage implements OnInit, OnDestroy {
       },
       error: (err: any) => {
         console.error('Error disconnecting Google Calendar:', err);
+        this.errorMessage.set('An error occurred while disconnecting. Please try again.');
+        this.isDisconnecting.set(false);
+      }
+    });
+  }
+
+  /**
+   * Inicia el proceso de conexión a Google Drive
+   */
+  connectGoogleDrive(): void {
+    this.isConnecting.set(true);
+    this.errorMessage.set(null);
+    
+    try {
+      const authUrl = this.integrationsService.getGoogleDriveAuthUrl();
+      if (authUrl) {
+        console.log('Redirecting to Google Drive OAuth...');
+        window.location.href = authUrl;
+      } else {
+        console.error('Could not get Google Drive Auth URL.');
+        this.errorMessage.set('Failed to get authorization URL. Please try again.');
+        this.isConnecting.set(false);
+      }
+    } catch (err) {
+      console.error('Error in connectGoogleDrive:', err);
+      this.errorMessage.set('An unexpected error occurred. Please try again.');
+      this.isConnecting.set(false);
+    }
+  }
+
+  /**
+   * Desconecta Google Drive
+   */
+  disconnectGoogleDrive(): void {
+    this.isDisconnecting.set(true);
+    this.errorMessage.set(null);
+    console.log('Attempting to disconnect Google Drive...');
+    
+    this.integrationsService.disconnectGoogleDrive().subscribe({
+      next: (success: boolean) => {
+        this.isDisconnecting.set(false);
+        if (success) {
+          console.log('Google Drive disconnected successfully.');
+          // El estado debería actualizarse a través de la suscripción a integrationStatus$
+        } else {
+          console.error('Failed to disconnect Google Drive.');
+          this.errorMessage.set('Failed to disconnect. Please try again.');
+        }
+      },
+      error: (err: any) => {
+        console.error('Error disconnecting Google Drive:', err);
         this.errorMessage.set('An error occurred while disconnecting. Please try again.');
         this.isDisconnecting.set(false);
       }
