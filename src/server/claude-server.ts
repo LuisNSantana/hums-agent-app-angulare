@@ -19,7 +19,10 @@ import { GoogleCalendarService } from './services/google-calendar.service';
 import { GoogleDriveService } from './services/google-drive.service';
 
 // AI Prompts
-import { buildSystemPrompt, buildContextAwarePrompt } from './ai/prompts';
+import { buildSystemPrompt, buildContextAwarePrompt, initializePromptCache, getPromptCacheStats } from './ai/prompts';
+
+// AI Services
+import { RetryService } from './ai/services/retry.service';
 
 // Types
 import { ChatMessage, ChatResponse, CalendarEvent, GoogleDriveFile } from './types';
@@ -70,6 +73,8 @@ function initializeEnvironment(): void {
   braveSearchService = new BraveSearchService(config.braveSearchApiKey || '');
   googleCalendarService = new GoogleCalendarService();
   googleDriveService = new GoogleDriveService();
+  
+  console.log('✅ RetryService configured for Claude API calls');
 }
 
 /**
@@ -372,16 +377,26 @@ async function processChatRequest(
     const systemPrompt = buildContextAwarePrompt(false, conversationLength);
     
     // Create user prompt with clear context
-    const userPrompt = `${message}`;
-    
-    console.log('🤖 Using system prompt length:', systemPrompt.length, 'characters');
+    const userPrompt = `${message}`;    console.log('🤖 Using system prompt length:', systemPrompt.length, 'characters');
     console.log('💬 User message:', message.substring(0, 100) + (message.length > 100 ? '...' : ''));
 
-    const response = await ai.generate({
-      model: claude35Haiku,
-      prompt: systemPrompt + '\n\nUsuario: ' + userPrompt,
-      tools: ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
-    });
+    // Use retry service to handle potential Claude API failures (529 errors, rate limits, timeouts)
+    const response = await RetryService.withRetry(
+      async () => {
+        return await ai.generate({
+          model: claude35Haiku,
+          prompt: systemPrompt + '\n\nUsuario: ' + userPrompt,
+          tools: ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
+        });
+      },
+      {
+        maxAttempts: 6,
+        initialDelay: 2000,
+        maxDelay: 60000,
+        multiplier: 2.5,
+        jitter: true
+      }
+    );
 
     return {
       success: true,
@@ -417,25 +432,50 @@ function createExpressServer(): express.Application {
     credentials: true
   }));
   
-  app.use(express.json({ limit: '10mb' }));
-  // Health check
+  app.use(express.json({ limit: '10mb' }));  // Health check
   app.get('/health', (req: Request, res: Response) => {
     res.json({ status: 'healthy', timestamp: new Date().toISOString() });
   });
-
+  // Runtime configuration endpoint
+  app.get('/api/config', (req: Request, res: Response) => {
+    try {
+      const config = {
+        googleClientId: process.env['GOOGLE_CLIENT_ID'] || '',
+        googleScopes: [
+          'https://www.googleapis.com/auth/calendar',
+          'https://www.googleapis.com/auth/drive'
+        ],
+        features: {
+          enableWebSearch: true,
+          enableFileUploads: true,
+          enableStreamingChat: true,
+          enableDebugMode: process.env['NODE_ENV'] !== 'production'
+        }
+      };
+      
+      res.json(config);
+    } catch (error) {
+      console.error('[Server] Config endpoint error:', error);
+      res.status(500).json({ error: 'Failed to load configuration' });
+    }
+  });
   // Prompt system info
   app.get('/api/prompt-info', (req: Request, res: Response) => {
     const systemPrompt = buildSystemPrompt(false, true);
+    const cacheStats = getPromptCacheStats();
+    
     res.json({
       promptLength: systemPrompt.length,
       currentDate: new Date().toLocaleDateString('es-ES'),
-      version: '2.0.0-robust',
+      version: '2.0.0-robust-cached',
       features: [
         'Context-aware prompting',
-        'Tool usage optimization',
+        'Tool usage optimization', 
         'Conversation patterns',
-        'Temporal awareness'
-      ]
+        'Temporal awareness',
+        'Intelligent prompt caching'
+      ],
+      cache: cacheStats
     });
   });
   // Main chat endpoint
@@ -465,14 +505,23 @@ function createExpressServer(): express.Application {
         authTokens, 
         conversationLength || 0
       );
-      res.json(response);
-    } catch (error) {
+      res.json(response);    } catch (error) {
       console.error('❌ API Error:', error);
       res.status(500).json({
         success: false,
         message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`
       });
     }
+  });
+
+  // Cache monitoring endpoint
+  app.get('/api/cache-stats', (req: Request, res: Response) => {
+    const cacheStats = getPromptCacheStats();
+    res.json({
+      status: 'active',
+      timestamp: new Date().toISOString(),
+      ...cacheStats
+    });
   });
 
   return app;
@@ -489,20 +538,24 @@ async function startServer(): Promise<void> {
     console.log('📋 Initializing Genkit...');
     await initializeGenkit();
     
+    console.log('🧠 Initializing Prompt Cache...');
+    initializePromptCache();
+    
     console.log('📋 Creating Express server...');
     const app = createExpressServer();
       const port = process.env['PORT'] || 3001;
-    app.listen(port, () => {
-      console.log(`✅ Server running on http://localhost:${port}`);
+    app.listen(port, () => {      console.log(`✅ Server running on http://localhost:${port}`);
       console.log('\nAvailable endpoints:');
       console.log('- GET  /health           - Health check');
       console.log('- GET  /api/prompt-info  - Prompt system information');
+      console.log('- GET  /api/cache-stats  - Prompt cache statistics');
       console.log('- POST /api/chat         - Main chat endpoint (with robust prompting)');
       console.log('\n🧠 Prompt System Features:');
       console.log('- ✅ Context-aware prompting');
       console.log('- ✅ Tool usage optimization');
       console.log('- ✅ Temporal awareness');
       console.log('- ✅ Conversation flow patterns');
+      console.log('- ✅ Intelligent prompt caching (NEW!)');
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error);

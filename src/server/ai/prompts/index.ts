@@ -1,12 +1,31 @@
 /**
  * Main Prompt Builder for Agent Hums
  * Combines all prompt components into a comprehensive system prompt
+ * Now with intelligent prompt caching for performance optimization
  */
 
 import { BASE_SYSTEM_PROMPT } from './base-system.prompt';
 import { TOOL_USAGE_GUIDELINES } from './tool-usage.prompt';
 import { CONVERSATION_PATTERNS } from './conversation-patterns.prompt';
 import { CONVERSATION_EXAMPLES } from './conversation-examples.prompt';
+import { promptCacheService } from '../cache/prompt-cache.service';
+
+/**
+ * Gets cached BASE_SYSTEM_PROMPT or caches it if not present
+ */
+function getCachedBaseSystemPrompt(): string {
+  // Try to get from cache first
+  let cachedPrompt = promptCacheService.get(BASE_SYSTEM_PROMPT, 'BASE_SYSTEM');
+  
+  if (!cachedPrompt) {
+    // Cache miss - store in cache for future use
+    promptCacheService.set(BASE_SYSTEM_PROMPT, 'BASE_SYSTEM');
+    cachedPrompt = BASE_SYSTEM_PROMPT;
+    console.log('📝 [PromptCache] BASE_SYSTEM_PROMPT cached for first time');
+  }
+  
+  return cachedPrompt;
+}
 
 /**
  * Builds the complete system prompt for Agent Hums
@@ -18,6 +37,9 @@ export function buildSystemPrompt(
   includeExamples: boolean = true,
   includeDateTime: boolean = true
 ): string {
+  // Use cached BASE_SYSTEM_PROMPT for performance
+  const basePrompt = getCachedBaseSystemPrompt();
+  
   const currentDate = new Date();
   const dateContext = includeDateTime 
     ? `\n\n## CONTEXTO TEMPORAL ACTUAL
@@ -37,7 +59,7 @@ IMPORTANTE: Tienes esta información temporal integrada. NO uses herramientas pa
     ? `\n\n${CONVERSATION_EXAMPLES}`
     : '';
 
-  return `${BASE_SYSTEM_PROMPT}${dateContext}
+  return `${basePrompt}${dateContext}
 
 ${TOOL_USAGE_GUIDELINES}
 
@@ -103,10 +125,43 @@ Ya has usado herramientas en esta conversación. Evita usarlas nuevamente a meno
   return basePrompt;
 }
 
+/**
+ * Initialize prompt caching system with preloading
+ */
+export function initializePromptCache(): void {
+  console.log('🚀 [PromptCache] Initializing prompt caching system...');
+  
+  // Preload essential static prompts
+  const staticPrompts = {
+    'BASE_SYSTEM': BASE_SYSTEM_PROMPT,
+    'TOOL_GUIDELINES': TOOL_USAGE_GUIDELINES,
+    'CONVERSATION_PATTERNS': CONVERSATION_PATTERNS,
+    'EXAMPLES': CONVERSATION_EXAMPLES
+  };
+  
+  promptCacheService.preloadCache(staticPrompts);
+  
+  // Start auto-cleanup every 30 minutes
+  promptCacheService.startAutoCleanup(30);
+  
+  console.log('✅ [PromptCache] Initialization complete!');
+}
+
+/**
+ * Get cache statistics for monitoring
+ */
+export function getPromptCacheStats() {
+  return {
+    stats: promptCacheService.getStats(),
+    info: promptCacheService.getCacheInfo()
+  };
+}
+
 // Export all individual components for flexibility
 export {
   BASE_SYSTEM_PROMPT,
   TOOL_USAGE_GUIDELINES,
   CONVERSATION_PATTERNS,
-  CONVERSATION_EXAMPLES
+  CONVERSATION_EXAMPLES,
+  promptCacheService
 };

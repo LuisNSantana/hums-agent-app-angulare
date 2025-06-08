@@ -46,6 +46,7 @@
     "cheerio": "^1.0.0",
     "concurrently": "^9.1.2",
     "dotenv": "^16.5.0",
+    "exponential-backoff": "^3.1.2",
     "express": "^4.21.2",
     "genkit": "^1.11.1",
     "genkitx-anthropic": "^0.22.0",
