@@ -23,13 +23,17 @@ import { AuthService } from './auth.service';
 import { AuthStateService } from './auth'; // Import AuthStateService
 import { SystemPromptsService } from './prompts/system-prompts.service';
 import { IntegrationsService } from './integrations.service'; // Import IntegrationsService
+import { environment } from '../../../environments/environment';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ChatService {
-  // 🌐 API Configuration for Claude Server
-  private readonly API_BASE_URL = 'http://localhost:3001';
+  // 🌐 API Configuration from environment
+  private readonly CLAUDE_SERVER_URL = environment.claude.serverUrl; // Genkit server (3002)
+  private readonly EXPRESS_SERVER_URL = environment.claude.expressUrl; // Express server (3001) 
+  private readonly CHAT_ENDPOINT = environment.claude.endpoints.chat;
+  private readonly HEALTH_ENDPOINT = environment.claude.endpoints.health;
   
   // Inject services
   private readonly http = inject(HttpClient);
@@ -221,71 +225,80 @@ export class ChatService {
       } catch (error) {
         console.warn('[ChatService] ⚠️ Error al obtener tokens de integración:', error);
         // Continuar sin tokens, el servidor manejará la ausencia
-      }
-      
-      // Determinar qué token usar como principal (priorizar Drive si el mensaje es sobre archivos)
-      const accessToken = driveToken || calendarToken;
-
-      // Preparar el payload para enviar al servidor
-      const claudeRequest = {
-        message: request.message,
-        conversationHistory: conversationHistory.length > 0 ? conversationHistory : [],
-        documents: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined,
-        accessToken: accessToken || null // Forzar un valor explícito (null en lugar de undefined)
-      };
-      
-      // Verificación CRÍTICA - asegurarse de que el token esté presente si está disponible
-      if (accessToken && claudeRequest.accessToken !== accessToken) {
-        console.error('[ChatService] 🚨 ERROR CRÍTICO: El token no se asignó correctamente al payload');
-        claudeRequest.accessToken = accessToken; // Forzar asignación
-      }
-
-      // Log DETALLADO del payload final ANTES de enviar
-      console.log('[ChatService] FINAL PAYLOAD PREPARATION - claudeRequest:', 
-        JSON.stringify(claudeRequest, (key, value) => 
-          key === 'file' && typeof value === 'string' && value.length > 100 ? value.substring(0,100) + '...[TRUNCATED]' : value, 
-        2)
-      );
-      console.log(`[ChatService] FINAL PAYLOAD accessToken value type: ${typeof accessToken}, value: ${accessToken ? 'present' : 'null/undefined'}`);
- 
-      // Call Claude server FIRST to get tools information
-      console.log('[ChatService] 🚀 Enviando solicitud a Claude Server...');
-      
-      // Prevenir posibles problemas con la serialización
+      }      // Adaptar payload para el nuevo servidor simplificado
       const requestPayload = {
-        message: claudeRequest.message,
-        conversationHistory: claudeRequest.conversationHistory,
-        documents: claudeRequest.documents,
-        accessToken: accessToken // Asignar directamente el token aquí
+        message: request.message,
+        conversationId: request.conversationId || 'default',
+        userId: this.authStateService.user()?.id,
+        attachments: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined
       };
       
-      console.log('[ChatService] 📣 SENDING FINAL PAYLOAD:', JSON.stringify({
-        message: requestPayload.message.substring(0, 20) + '...',
-        historyLength: requestPayload.conversationHistory.length,
-        accessTokenPresent: !!requestPayload.accessToken,
-        accessTokenType: typeof requestPayload.accessToken
+      console.log('[ChatService] 📣 SENDING SIMPLIFIED PAYLOAD:', JSON.stringify({
+        message: requestPayload.message.substring(0, 50) + '...',
+        conversationId: requestPayload.conversationId,
+        userId: requestPayload.userId ? 'present' : 'null',
+        attachmentsCount: requestPayload.attachments?.length || 0,
+        calendarTokenPresent: !!calendarToken,
+        driveTokenPresent: !!driveToken
       }));
-      
-      const response = await fetch('http://localhost:3001/chatFlow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(requestPayload)
-      });
 
-      if (!response.ok) {
-        throw new ChatError('Failed to get response from Claude Server', 'STREAM_ERROR', response.status);
+      // Determinar qué tokens enviar
+      const headers: { [key: string]: string } = {
+        'Content-Type': 'application/json',
+      };
+
+      // Enviar tokens específicos por servicio
+      if (calendarToken) {
+        headers['X-Calendar-Token'] = calendarToken;
+        console.log('[ChatService] 🔑 Agregando token de Google Calendar al header');
+      }
+      
+      if (driveToken) {
+        headers['X-Drive-Token'] = driveToken;
+        console.log('[ChatService] 🔑 Agregando token de Google Drive al header');
+      }
+        // Mantener backward compatibility: usar el token más relevante como Authorization header
+      const primaryToken = driveToken || calendarToken;
+      if (primaryToken) {
+        headers['Authorization'] = `Bearer ${primaryToken}`;
+        console.log('[ChatService] 🔑 Agregando token principal como Authorization header (backward compatibility)');
+      }
+
+      const response = await fetch(`${this.CLAUDE_SERVER_URL}${this.CHAT_ENDPOINT}`, {
+        method: 'POST',
+        headers: headers,
+        body: JSON.stringify(requestPayload)
+      });      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[ChatService] Server error response:', errorText);
+        throw new ChatError(`Failed to get response from Claude Server: ${errorText}`, 'STREAM_ERROR', response.status);
       }
 
       const result = await response.json();
       
-      if (result.error) {
-        throw new ChatError(result.error, 'CLAUDE_ERROR');
+      if (!result.success || result.error) {
+        throw new ChatError(result.error || 'Server returned unsuccessful response', 'CLAUDE_ERROR');
       }
 
-      const fullResponse = result.response || '';
-      const toolsUsed = Array.isArray(result.toolsUsed) ? result.toolsUsed : [];      // FIRST: Show tool execution messages if any tools were used
+      // El nuevo servidor devuelve la respuesta en 'message' en lugar de 'response'
+      const fullResponse = result.message || '';
+      
+      // Debug para ver la estructura de respuesta del nuevo servidor
+      console.log('[ChatService] Respuesta del servidor Claude (nuevo formato):', {
+        success: result.success,
+        message: fullResponse.substring(0, 100) + '...',
+        conversationId: result.conversationId,
+        availableTools: result.availableTools,
+        resultKeys: Object.keys(result)
+      });
+        // Por ahora, el servidor simplificado no devuelve información de herramientas usadas
+      // En el futuro se puede implementar si es necesario
+      const toolsUsed: string[] = [];
+      
+      // TODO: Reimplementar detección de herramientas cuando el servidor lo soporte
+      // if (fullResponse.includes('de Google Drive') || ...)
+      
+      // FIRST: Show tool execution messages if any tools were used
       if (toolsUsed.length > 0) {
         console.log('[ChatService] Herramientas detectadas:', toolsUsed);
         
@@ -296,8 +309,8 @@ export class ChatService {
           // Simular tiempo de ejecución de la herramienta
           await new Promise(resolve => setTimeout(resolve, 800));
           
-          // Marcar como exitosa y remover el mensaje (no duplicar)
-          this.removeToolSystemMessage(toolMsgId);
+          // Marcar como exitosa (en lugar de eliminar el mensaje)
+          this.updateToolSystemMessage(toolMsgId, 'success');
           
           // Pequeño delay antes de la siguiente herramienta
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -648,12 +661,10 @@ export class ChatService {
       console.log('[ChatService] 📊 Database models loaded:', dbModels.length);
       dbModels.forEach(model => {
         console.log(`  - ${model.name} (${model.id}) [${model.provider}] - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
-      });
-
-      // Check Claude server availability
+      });      // Check Claude server availability (Express server for health check)
       console.log('[ChatService] 🤖 Checking Claude Server availability...');
       try {
-        const response = await fetch('http://localhost:3001/health');
+        const response = await fetch(`${this.EXPRESS_SERVER_URL}${this.HEALTH_ENDPOINT}`);
         if (response.ok) {
           const data = await response.json();
           console.log('[ChatService] 🤖 Claude Server is available:', data);
@@ -972,6 +983,10 @@ export class ChatService {
         return 'Google Calendar';
       case 'googleDrive':
       case 'google_drive':
+      case 'listGoogleDriveFiles':
+      case 'uploadGoogleDriveFile':
+      case 'shareGoogleDriveFile':
+      case 'createGoogleDriveFolder':
         return 'Google Drive';
       case 'analyzeDocument':
       case 'document_analyzer':

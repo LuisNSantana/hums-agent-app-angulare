@@ -48,6 +48,8 @@ testem.log
 .DS_Store
 Thumbs.db
 
-# Genkit traces (do not commit tool traces)
+# Genkit traces and runtime files (do not commit tool traces)
+/.genkit/
+.genkit/
 .genkit/traces
 traces_idx

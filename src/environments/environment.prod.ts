@@ -10,14 +10,13 @@ export const environment = {
   api: {
     baseUrl: 'https://your-production-api.com',
     timeout: 30000,
-  },
-  
-  // Claude Server Configuration
+  },  // Claude Server Configuration
   claude: {
-    serverUrl: 'https://your-production-api.com',
+    serverUrl: 'https://your-production-api.com', // Express server for chat (unified)
+    expressUrl: 'https://your-production-api.com', // Express server for health/info
     endpoints: {
-      chat: '/chatFlow',
-      health: '/health'
+      chat: '/api/chat', // Express endpoint
+      health: '/health'    // Express endpoint
     }
   },
   

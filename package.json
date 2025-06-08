@@ -12,7 +12,7 @@
     "genkit:serve": "tsx src/genkit-server.ts",
     "genkit:hybrid": "tsx src/genkit-hybrid-server.ts",
     "claude:test": "tsx src/test-server.ts",
-    "claude:server": "tsx src/claude-server.ts",
+    "claude:server": "tsx src/server/claude-server.ts",
     "claude:server:fixed": "tsx src/claude-server-fixed.ts",
     "serve:genkit": "tsx src/genkit-server.ts",
     "serve:hybrid": "tsx src/genkit-hybrid-server.ts",

@@ -10,14 +10,13 @@ export const environment = {
   api: {
     baseUrl: 'http://localhost:3001',
     timeout: 30000,
-  },
-  
-  // Claude Server Configuration
+  },  // Claude Server Configuration
   claude: {
-    serverUrl: 'http://localhost:3001',
+    serverUrl: 'http://localhost:3001', // Express server port for chat (unified)
+    expressUrl: 'http://localhost:3001', // Express server port for health/info
     endpoints: {
-      chat: '/chatFlow',
-      health: '/health'
+      chat: '/api/chat', // Corrected Express endpoint
+      health: '/health'    // Express endpoint
     }
   },
   
@@ -26,6 +25,13 @@ export const environment = {
     url: '',
     anonKey: ''
   },
+    // Google OAuth Configuration
+  googleClientId: process.env['GOOGLE_CLIENT_ID'] || '',
+  googleClientSecret: process.env['GOOGLE_CLIENT_SECRET'] || '',
+  googleScopes: [
+    'https://www.googleapis.com/auth/calendar',
+    'https://www.googleapis.com/auth/drive'
+  ],
   
   // Feature Flags
   features: {
