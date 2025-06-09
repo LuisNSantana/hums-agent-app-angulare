@@ -89,20 +89,21 @@ export class RetryService {
     if (!error) return false;
 
     const errorMessage = error.message || error.toString();
-    const statusCode = error.status || error.statusCode || error.code;
-
-    // Check for Anthropic API overload errors
+    const statusCode = error.status || error.statusCode || error.code;    // Check for Anthropic API overload errors (529 - highest priority for retries)
     if (statusCode === 529 || errorMessage.toLowerCase().includes('overloaded')) {
+      console.log('[RetryService] 🚨 Detected 529 Overloaded error - will retry with extended backoff');
       return true;
     }
 
     // Check for rate limiting
     if (statusCode === 429 || errorMessage.toLowerCase().includes('rate limit')) {
+      console.log('[RetryService] 🚦 Detected rate limit error - will retry');
       return true;
     }
 
     // Check for temporary server errors
     if (statusCode >= 500 && statusCode < 600) {
+      console.log(`[RetryService] 🔧 Detected server error ${statusCode} - will retry`);
       return true;
     }
 
@@ -127,14 +128,15 @@ export class RetryService {
    * @param options Retry configuration
    * @returns Function that wraps API calls with retry logic
    */
-  static createClaudeRetryWrapper(options: RetryOptions = {}) {
-    const config = { 
+  static createClaudeRetryWrapper(options: RetryOptions = {}) {    const config = { 
       ...this.DEFAULT_OPTIONS, 
       ...options,
-      // More aggressive settings for Claude API
-      maxAttempts: 6,
-      initialDelay: 2000,
-      maxDelay: 60000
+      // Optimized settings for Claude API 529 errors (based on Anthropic best practices)
+      maxAttempts: 8,           // Increased attempts for 529 errors
+      initialDelay: 3000,       // Start with 3 seconds (recommended for 529)
+      maxDelay: 90000,          // Max 90 seconds between retries
+      multiplier: 2.0,          // Standard exponential backoff
+      jitter: true              // Add randomness to avoid thundering herd
     };
 
     return async <T>(apiCall: () => Promise<T>): Promise<T> => {
@@ -150,6 +152,46 @@ export class RetryService {
       } catch (error: any) {
         const duration = Date.now() - startTime;
         console.error(`[RetryService] ❌ Claude API call failed after ${duration}ms and ${config.maxAttempts} attempts:`, error?.message || error);
+        throw error;
+      }
+    };
+  }
+
+  /**
+   * Create a specialized retry wrapper for handling Anthropic 529 Overloaded errors
+   * Uses the most patient retry strategy with extended backoff
+   * @param options Override options for 529-specific configuration
+   * @returns Function that wraps API calls with 529-optimized retry logic
+   */
+  static createOverloadedRetryWrapper(options: RetryOptions = {}) {
+    const config = { 
+      ...RETRY_CONFIGS.OVERLOADED_529, 
+      ...options
+    };
+
+    return async <T>(apiCall: () => Promise<T>): Promise<T> => {
+      console.log('[RetryService] 🔄 Executing API call with 529-Overloaded retry protection');
+      console.log(`[RetryService] 📊 Config: ${config.maxAttempts} attempts, ${config.initialDelay}ms initial delay, ${config.maxDelay}ms max delay`);
+      
+      const startTime = Date.now();
+      
+      try {
+        const result = await this.withRetry(apiCall, config);
+        const duration = Date.now() - startTime;
+        console.log(`[RetryService] ✅ API call succeeded after ${duration}ms`);
+        return result;
+      } catch (error: any) {
+        const duration = Date.now() - startTime;
+        console.error(`[RetryService] ❌ API call failed after ${duration}ms and ${config.maxAttempts} attempts:`, error?.message || error);
+        
+        // Provide specific guidance for 529 errors
+        if (error?.status === 529 || error?.message?.toLowerCase().includes('overloaded')) {
+          console.error('💡 [RetryService] This appears to be an Anthropic server overload. Consider:');
+          console.error('   - Waiting a few minutes before trying again');
+          console.error('   - Reducing request complexity or frequency');
+          console.error('   - Checking Anthropic status page: https://status.anthropic.com');
+        }
+        
         throw error;
       }
     };
@@ -188,6 +230,7 @@ export class RetryService {
 // Export convenience functions
 export const withRetry = RetryService.withRetry.bind(RetryService);
 export const createClaudeRetryWrapper = RetryService.createClaudeRetryWrapper.bind(RetryService);
+export const createOverloadedRetryWrapper = RetryService.createOverloadedRetryWrapper.bind(RetryService);
 
 // Default retry configurations for different scenarios
 export const RETRY_CONFIGS = {
@@ -206,13 +249,21 @@ export const RETRY_CONFIGS = {
     maxDelay: 30000,
     multiplier: 2
   } as RetryOptions,
-
   /** Claude API calls that need patience */
   CLAUDE_API: {
-    maxAttempts: 6,
-    initialDelay: 2000,
-    maxDelay: 60000,
-    multiplier: 2.5
+    maxAttempts: 8,
+    initialDelay: 3000,
+    maxDelay: 90000,
+    multiplier: 2.0
+  } as RetryOptions,
+
+  /** Specific configuration for 529 Overloaded errors (most patient approach) */
+  OVERLOADED_529: {
+    maxAttempts: 10,
+    initialDelay: 5000,      // Start with 5 seconds for 529 errors
+    maxDelay: 120000,        // Max 2 minutes between retries
+    multiplier: 1.8,         // Slower escalation for server overload
+    jitter: true
   } as RetryOptions,
 
   /** Critical operations that should retry aggressively */

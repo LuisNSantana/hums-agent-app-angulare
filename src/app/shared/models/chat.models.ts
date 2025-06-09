@@ -24,6 +24,7 @@ export interface ChatMessageMetadata {
   toolsUsed?: string[]; // Herramientas usadas por el agente
   tool?: string; // Herramienta en ejecución
   toolStatus?: 'pending' | 'success' | 'error'; // Estado de la herramienta
+  isError?: boolean; // Flag to indicate an error message
 }
 
 export interface ChatAttachment {

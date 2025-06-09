@@ -125,7 +125,7 @@ export class ChatInputComponent {
   readonly availableModels = input<any[]>([]);
   readonly selectedModel = input<string>('');
   // Outputs
-  readonly messageSent = output<string>();
+  readonly messageSent = output<{ text: string; attachments?: ChatAttachment[] }>();
   readonly modelChanged = output<string>();
   readonly fileAttached = output<File>();
   readonly messageTyping = output<boolean>();
@@ -227,35 +227,38 @@ export class ChatInputComponent {
     const attachments = this.currentAttachments();
     
     if ((msg || attachments.length > 0) && this.canSend()) {
-      // If we have attachments, emit them too
-      if (attachments.length > 0) {
-        // For multimodal messages, create appropriate default message based on attachment type
-        let defaultMessage = '';
-        const hasImages = attachments.some(a => a.type === 'image');
-        const hasDocuments = attachments.some(a => a.type === 'document');
-        
-        if (hasDocuments && hasImages) {
-          defaultMessage = 'Analyze these files:';
-        } else if (hasDocuments) {
-          defaultMessage = 'Analyze this document:';
-        } else if (hasImages) {
-          defaultMessage = 'Analyze this image:';
-        }
-        
-        this.messageSent.emit(msg || defaultMessage);
-        // Emit attachments separately for now
-        attachments.forEach(attachment => {
-          this.attachmentAdded.emit(attachment);
-        });
-      } else {
-        // Regular text message
-        this.messageSent.emit(msg);
-      }
+      // Create the message object that ChatInterfaceComponent expects
+      const messageEvent = {
+        text: msg || this.getDefaultMessageForAttachments(attachments),
+        attachments: attachments.length > 0 ? attachments : undefined
+      };
+      
+      this.messageSent.emit(messageEvent);
       
       this.message.set('');
       this.clearAttachments();
       this.resetTextareaHeight();
     }
+  }
+
+  /**
+   * Get default message based on attachment types
+   */
+  private getDefaultMessageForAttachments(attachments: ChatAttachment[]): string {
+    if (attachments.length === 0) return '';
+    
+    const hasImages = attachments.some(a => a.type === 'image');
+    const hasDocuments = attachments.some(a => a.type === 'document');
+    
+    if (hasDocuments && hasImages) {
+      return 'Analyze these files:';
+    } else if (hasDocuments) {
+      return 'Analyze this document:';
+    } else if (hasImages) {
+      return 'Analyze this image:';
+    }
+    
+    return 'Analyze this attachment:';
   }
 
   /**

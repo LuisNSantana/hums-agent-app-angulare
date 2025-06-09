@@ -207,8 +207,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       const defaultModel = this.chatService.getDefaultModel();
       const currentSel = this.modelSelectionService.selectedModel();
       
-      console.log('[ChatInterface] 🔄 Effect de modelo - Models:', models.length, 'Default:', defaultModel?.name, 'Current:', currentSel);
-      
       const id = this.modelSelectionService.determineModelToUse(models, defaultModel, currentSel);
       this.modelSelectionService.selectedModel.set(id);
     });
@@ -224,7 +222,9 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.chatService.messageStream$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(chunk => console.log('Stream chunk received:', chunk));
+      .subscribe(chunk => {
+        // Handle stream chunks silently
+      });
   }
 
   ngOnDestroy(): void {
@@ -258,14 +258,17 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
     }
   }
 
-  async onMessageSubmit(content: string): Promise<void> {
+  async onMessageSubmit(event: { text: string; attachments?: ChatAttachment[] }): Promise<void> {
     try {
       let convId = this.currentConversationId();
+      
       if (!convId) {
-        await this.chatService.createConversation(undefined, content);
+        await this.chatService.createConversation(undefined, event.text);
         convId = this.currentConversationId();
+        
         if (window.innerWidth < 768) this.layoutService.toggleSidebar();
       }
+      
       if (convId) {
         let modelId = this.selectedModel();
         const selected = this.availableModels().find(m => m.name === modelId);
@@ -273,14 +276,22 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
           modelId = this.chatService.getDefaultModelId();
           this.modelSelectionService.selectedModel.set(modelId);
         }
-        const attachments = this.pendingAttachments();
+        
+        // Combine pending attachments with new attachments from the event
+        const existingAttachments = this.pendingAttachments();
+        const newAttachments = event.attachments || [];
+        const allAttachments = [...existingAttachments, ...newAttachments];
+        
         await this.chatService.sendMessage({
-          message: content,
+          message: event.text,
           conversationId: convId,
           model: modelId,
-          attachments: attachments.length ? attachments : undefined
+          attachments: allAttachments.length ? allAttachments : undefined
         });
+        
         this.pendingAttachments.set([]);
+      } else {
+        console.error('Failed to get conversation ID');
       }
     } catch (error) {
       console.error('Error sending message:', error);
@@ -288,7 +299,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   }
 
   onFileAttached(file: File): void {
-    console.log('File attached:', file);
+    // Handle file attachment
   }
 
   onAttachmentAdded(attachment: ChatAttachment): void {
@@ -296,7 +307,7 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
   }
 
   onMessageTyping(isTyping: boolean): void {
-    console.log('User typing:', isTyping);
+    // Handle typing indicator
   }
 
   onMessageAction(action: { type: string; messageId: string; data?: any }): void {
@@ -320,7 +331,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
         const message = this.messages().find(m => m.id === id);
         if (message) {
           // Implementar regeneración según la API del ChatService
-          console.log('[ChatInterface] Regenerando mensaje:', id);
           await this.chatService.sendMessage({
             message: message.content,
             conversationId: convId,
@@ -341,7 +351,6 @@ export class ChatInterfaceComponent implements OnInit, OnDestroy {
       if (convId) {
         // Implementar edición de mensaje según la API del ChatService
         // Esto dependerá de cómo el ChatService maneja la edición
-        console.log('Editing message:', id, 'with new content:', newContent);
         // Ejemplo: this.chatService.sendMessage({ editMessageId: id, message: newContent, conversationId: convId });
       }
     } catch (error) {

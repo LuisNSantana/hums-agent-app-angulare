@@ -921,7 +921,6 @@ export class ChatHeaderComponent implements OnInit {
    */
   onExportChat(): void {
     // TODO: Implement chat export
-    console.log('Export chat');
   }
 
   /**

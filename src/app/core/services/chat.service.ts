@@ -16,13 +16,14 @@ import {
   Conversation,
   StreamChunk, 
   AIModel,
-  ChatError 
+  ChatError,
+  ChatMessageMetadata
 } from '../../shared/models/chat.models';
 import { SupabaseService } from './supabase.service';
 import { AuthService } from './auth.service';
-import { AuthStateService } from './auth'; // Import AuthStateService
+import { AuthStateService } from './auth';
 import { SystemPromptsService } from './prompts/system-prompts.service';
-import { IntegrationsService } from './integrations.service'; // Import IntegrationsService
+import { IntegrationsService } from './integrations.service';
 import { environment } from '../../../environments/environment';
 
 @Injectable({
@@ -64,11 +65,8 @@ export class ChatService {
   
   // Stream observable
   readonly messageStream$ = this.streamSubject.asObservable();
+
   constructor() {
-    // Inicializar estados
-    console.log('[ChatService] 🚀 Inicializando servicio de chat');
-    
-    // Cargar modelos y conversaciones
     this.initializeService();
   }
   
@@ -77,27 +75,19 @@ export class ChatService {
    */
   private async initializeService(): Promise<void> {
     try {
-      console.log('[ChatService] 🔄 Inicializando datos del servicio');
-      
-      // Primero cargar modelos para tenerlos disponibles antes de cargar conversaciones
       await this.loadAvailableModels();
-      
-      // Luego cargar conversaciones (que pueden depender de modelos)
       await this.loadConversations();
-      
-      console.log('[ChatService] ✅ Servicio inicializado correctamente');
     } catch (error) {
       console.error('[ChatService] ❌ Error al inicializar el servicio:', error);
     }
-  }  /**
+  }
+
+  /**
    * Sends a message and handles streaming response
-   */  
+   */
   async sendMessage(request: ChatRequest): Promise<void> {
     try {
       this._isProcessing.set(true);
-      console.log('[ChatService] Enviando mensaje:', request);
-      console.log('[ChatService] Model recibido:', request.model);
-      console.log('[ChatService] Tipo del model:', typeof request.model);
       
       // Add user message immediately (including attachments in metadata)
       const userMessage: ChatMessage = {
@@ -112,9 +102,6 @@ export class ChatService {
       };
       
       await this.addMessage(userMessage);
-      
-      // NO crear mensaje del asistente aquí - será creado después de las herramientas
-      // Start streaming directly - the assistant message will be created internally
       await this.streamChatResponse(request);
       
     } catch (error) {
@@ -122,9 +109,10 @@ export class ChatService {
     } finally {
       this._isProcessing.set(false);
     }
-  }/**
+  }
+
+  /**
    * Get the system prompt for the AI agent
-   * Uses custom prompt from conversation settings or falls back to active system prompt
    */
   private getSystemPrompt(conversationSettings?: ConversationSettings): string {
     // Return custom system prompt if provided
@@ -139,36 +127,29 @@ export class ChatService {
       userName = authUser.displayName || authUser.email?.split('@')[0];
     }
 
-    // Use the active system prompt from SystemPromptsService, passing the user's name
+    // Use the active system prompt from SystemPromptsService
     return this.systemPromptsService.generateSystemPrompt({ userName: userName });
-  }  /**
+  }
+
+  /**
    * Handles chat response via Claude 3.5 Sonnet server
    */
   private async streamChatResponse(request: ChatRequest): Promise<void> {
     let assistantMessageId: string | null = null;
     
     try {
-      console.log('[ChatService] 📡 Iniciando streaming de respuesta para conversación:', request.conversationId);
-      
       // Get current conversation for settings
       const currentConversation = this._currentConversation();
-      console.log('[ChatService] 📓 Usando conversación actual:', currentConversation?.id);
       
-      // Build conversation history for Claude - importante para el contexto
+      // Build conversation history for Claude
       const allMessages = this._messages();
       const messagesForConversation = allMessages.filter(m => m.conversationId === request.conversationId && !m.isStreaming);
       
-      console.log('[ChatService] 💬 Total mensajes:', allMessages.length, 
-        'Mensajes relevantes para la conversación:', messagesForConversation.length);
-      
-      // Convertir los mensajes al formato esperado por Claude (roles user/assistant y contenido)
+      // Convert messages to Claude format
       const conversationHistory = messagesForConversation.map(m => ({
         role: m.role === 'user' ? 'user' : 'assistant',
         content: m.content
       }));
-      
-      console.log('[ChatService] 📋 Historia de conversación preparada con', 
-        conversationHistory.length, 'mensajes');
 
       // Prepare documents for analysis if any PDF attachments are present
       let documentsForAnalysis: any[] = [];
@@ -181,146 +162,107 @@ export class ChatService {
             file: attachment.base64,
             fileName: attachment.name,
             mimeType: attachment.mimeType,
-            analysisType: 'analyze', // Default to comprehensive analysis
+            analysisType: 'analyze',
             maxLength: 10000,
             includeMetadata: true
           }));
       }
 
-      // Obtener los tokens de integración necesarios (Google Calendar y Google Drive)
-      console.log('[ChatService] 🔍 Obteniendo tokens de integración...');
+      // Get integration tokens
       let calendarToken: string | null = null;
       let driveToken: string | null = null;
       
       try {
-        // Verificar usuario autenticado antes de obtener tokens
         const authUser = this.authStateService.getCurrentUser();
-        console.log('[ChatService] 👤 Usuario autenticado para tokens:', authUser?.id ?? 'ninguno');
         
-        if (!authUser) {
-          console.warn('[ChatService] ⚠️ No hay usuario autenticado para obtener tokens');
-        } else {
-          // Obtener token de Google Calendar
+        if (authUser) {
           calendarToken = await firstValueFrom(this.integrationsService.getGoogleCalendarToken());
-          console.log('[ChatService] 🔑 Token de Google Calendar obtenido:', 
-            calendarToken ? '✅ Token disponible' : '❌ Token no disponible');
-          
-          // Obtener token de Google Drive
           driveToken = await firstValueFrom(this.integrationsService.getGoogleDriveToken());
-          console.log('[ChatService] 🔑 Token de Google Drive obtenido:', 
-            driveToken ? '✅ Token disponible' : '❌ Token no disponible');
-          
-          // Si el mensaje contiene palabras clave relacionadas con Google Drive,
-          // priorizar el token de Drive sobre el de Calendar
-          const isDriveRelatedMessage = request.message.toLowerCase().includes('drive') || 
-                                        request.message.toLowerCase().includes('archivo') || 
-                                        request.message.toLowerCase().includes('file') || 
-                                        request.message.toLowerCase().includes('folder');
-          
-          if (isDriveRelatedMessage && driveToken) {
-            console.log('[ChatService] 🔄 Mensaje relacionado con Drive detectado, priorizando token de Drive');
-            // Usaremos el token de Drive como token principal
-          }
         }
       } catch (error) {
         console.warn('[ChatService] ⚠️ Error al obtener tokens de integración:', error);
-        // Continuar sin tokens, el servidor manejará la ausencia
-      }      // Adaptar payload para el nuevo servidor simplificado
+      }
+
+      // Prepare request payload
       const requestPayload = {
         message: request.message,
         conversationId: request.conversationId || 'default',
         userId: this.authStateService.user()?.id,
         attachments: documentsForAnalysis.length > 0 ? documentsForAnalysis : undefined
       };
-      
-      console.log('[ChatService] 📣 SENDING SIMPLIFIED PAYLOAD:', JSON.stringify({
-        message: requestPayload.message.substring(0, 50) + '...',
-        conversationId: requestPayload.conversationId,
-        userId: requestPayload.userId ? 'present' : 'null',
-        attachmentsCount: requestPayload.attachments?.length || 0,
-        calendarTokenPresent: !!calendarToken,
-        driveTokenPresent: !!driveToken
-      }));
 
-      // Determinar qué tokens enviar
+      // Set headers
       const headers: { [key: string]: string } = {
         'Content-Type': 'application/json',
       };
 
-      // Enviar tokens específicos por servicio
       if (calendarToken) {
         headers['X-Calendar-Token'] = calendarToken;
-        console.log('[ChatService] 🔑 Agregando token de Google Calendar al header');
       }
       
       if (driveToken) {
         headers['X-Drive-Token'] = driveToken;
-        console.log('[ChatService] 🔑 Agregando token de Google Drive al header');
       }
-        // Mantener backward compatibility: usar el token más relevante como Authorization header
+
       const primaryToken = driveToken || calendarToken;
       if (primaryToken) {
         headers['Authorization'] = `Bearer ${primaryToken}`;
-        console.log('[ChatService] 🔑 Agregando token principal como Authorization header (backward compatibility)');
       }
 
       const response = await fetch(`${this.CLAUDE_SERVER_URL}${this.CHAT_ENDPOINT}`, {
         method: 'POST',
         headers: headers,
         body: JSON.stringify(requestPayload)
-      });      if (!response.ok) {
+      });
+
+      if (!response.ok) {
         const errorText = await response.text();
-        console.error('[ChatService] Server error response:', errorText);
         throw new ChatError(`Failed to get response from Claude Server: ${errorText}`, 'STREAM_ERROR', response.status);
       }
 
-      const result = await response.json();
-      
+      let result;
+      try {
+        result = await response.json();
+      } catch (jsonError: any) {
+        throw new ChatError(`Server returned non-JSON response: ${jsonError.message}`, 'INVALID_RESPONSE');
+      }
+
       if (!result.success || result.error) {
         throw new ChatError(result.error || 'Server returned unsuccessful response', 'CLAUDE_ERROR');
       }
 
-      // El nuevo servidor devuelve la respuesta en 'message' en lugar de 'response'
       const fullResponse = result.message || '';
       
-      // Debug para ver la estructura de respuesta del nuevo servidor
-      console.log('[ChatService] Respuesta del servidor Claude (nuevo formato):', {
-        success: result.success,
-        message: fullResponse.substring(0, 100) + '...',
-        conversationId: result.conversationId,
-        availableTools: result.availableTools,
-        resultKeys: Object.keys(result)
-      });
-        // Por ahora, el servidor simplificado no devuelve información de herramientas usadas
-      // En el futuro se puede implementar si es necesario
+      // Extract tools used from server response
       const toolsUsed: string[] = [];
-      
-      // TODO: Reimplementar detección de herramientas cuando el servidor lo soporte
-      // if (fullResponse.includes('de Google Drive') || ...)
-      
-      // FIRST: Show tool execution messages if any tools were used
-      if (toolsUsed.length > 0) {
-        console.log('[ChatService] Herramientas detectadas:', toolsUsed);
-        
-        for (const tool of toolsUsed) {
-          // Crear mensaje de herramienta pendiente
-          const toolMsgId = this.addToolSystemMessage(request.conversationId, tool, 'pending');
-          
-          // Simular tiempo de ejecución de la herramienta
-          await new Promise(resolve => setTimeout(resolve, 800));
-          
-          // Marcar como exitosa (en lugar de eliminar el mensaje)
-          this.updateToolSystemMessage(toolMsgId, 'success');
-          
-          // Pequeño delay antes de la siguiente herramienta
-          await new Promise(resolve => setTimeout(resolve, 100));
+      if (result.toolCalls && Array.isArray(result.toolCalls)) {
+        for (const toolCall of result.toolCalls) {
+          if (toolCall && typeof toolCall.name === 'string' && !toolsUsed.includes(toolCall.name)) {
+            toolsUsed.push(toolCall.name);
+          } else if (toolCall && typeof toolCall.toolName === 'string' && !toolsUsed.includes(toolCall.toolName)) {
+            toolsUsed.push(toolCall.toolName);
+          } else if (typeof toolCall === 'string' && !toolsUsed.includes(toolCall)) {
+            toolsUsed.push(toolCall);
+          }
         }
-        
-        // Delay adicional antes de mostrar la respuesta del asistente
-        await new Promise(resolve => setTimeout(resolve, 300));
       }
 
-      // SECOND: Create assistant message AFTER tools have been shown
+      // Show tool execution messages if any tools were used
+      if (toolsUsed.length > 0) {
+        for (const toolName of toolsUsed) {
+          const toolMsgId = this.addToolSystemMessage(request.conversationId, toolName, 'pending');
+          
+          // Simulate tool execution
+          await new Promise(resolve => setTimeout(resolve, 500)); 
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          this.updateToolSystemMessage(toolMsgId, 'success');
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+
+      // Create assistant message AFTER tools have been shown
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
         content: '',
@@ -335,7 +277,7 @@ export class ChatService {
       this._messages.set([...currentMessages, assistantMessage]);
       assistantMessageId = assistantMessage.id;
 
-      // THIRD: Stream the assistant response with typing effect
+      // Stream the assistant response with typing effect
       const words = fullResponse.split(' ');
       let accumulatedContent = '';
 
@@ -353,118 +295,100 @@ export class ChatService {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       
-      // Al finalizar, guardar toolsUsed en el metadata
       this.addToolsUsedToMessage(assistantMessageId, toolsUsed);
       await this.finalizeStreamingMessage(assistantMessageId);
 
     } catch (error) {
-      // Si hay error en el mensaje del asistente, manejarlo
       if (assistantMessageId) {
         this.handleStreamError(error as Error, assistantMessageId);
       } else {
-        // Si no se creó mensaje del asistente, crear uno con error
-        const errorMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          content: 'Sorry, I encountered an error while processing your request.',
-          role: 'assistant',
-          timestamp: new Date(),
-          conversationId: request.conversationId,
-          isError: true
-        };
-        
-        const currentMessages = this._messages();
-        this._messages.set([...currentMessages, errorMessage]);
-        this.handleError(error as Error);
+        console.error('[ChatService] Error before assistant message creation:', error);
+        this.addErrorMessageToUI(request.conversationId, 'An unexpected error occurred while processing your request.');
       }
     }
   }
-  /**
-   * Updates streaming message content
-   */
-  private updateStreamingMessage(messageId: string, content: string): void {
-    const currentMessages = this._messages();
-    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
-    
-    if (messageIndex >= 0) {
-      const updatedMessages = [...currentMessages];
-      updatedMessages[messageIndex] = {
-        ...updatedMessages[messageIndex],
-        content: content
-      };
-      
-      this._messages.set(updatedMessages);
+
+  private handleStreamError(error: Error, messageId: string | null): void {
+    console.error('[ChatService] Stream error:', error);
+    if (messageId) {
+      this.updateStreamingMessage(messageId, 'Error processing response.');
+      this.finalizeStreamingMessage(messageId, true);
     }
+    this.streamSubject.error(error);
   }
 
-  /**
-   * Processes individual stream chunks
-   */
-  private processStreamChunk(chunk: StreamChunk, messageId: string): void {
-    const currentMessages = this._messages();
-    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
-    
-    if (messageIndex >= 0) {
-      const updatedMessages = [...currentMessages];
-      updatedMessages[messageIndex] = {
-        ...updatedMessages[messageIndex],
-        content: updatedMessages[messageIndex].content + chunk.delta
-      };
-      
-      this._messages.set(updatedMessages);
-      this.streamSubject.next(chunk);
-    }
+  private addErrorMessageToUI(conversationId: string, content: string): void {
+    const errorId = crypto.randomUUID();
+    const errorMessage: ChatMessage = {
+      id: errorId,
+      conversationId,
+      content,
+      role: 'system',
+      timestamp: new Date(),
+      isError: true,
+      metadata: {
+        isError: true 
+      }
+    };
+    this._messages.update(msgs => [...msgs, errorMessage]);
   }
-  /**
-   * Finalizes streaming message and saves to database
-   */
-  private async finalizeStreamingMessage(messageId: string): Promise<void> {
-    const currentMessages = this._messages();
-    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
-    
-    if (messageIndex >= 0) {
-      const message = currentMessages[messageIndex];
-      let finalContent = message.content;
-      let thoughts: string | undefined = undefined;
 
-      // Regular expression to find <think>...</think> tags and capture thoughts and the rest of the content
-      // This regex handles multi-line content within <think> tags
-      const thinkTagRegex = /<think>([\s\S]*?)<\/think>([\s\S]*)/;
-      const match = finalContent.match(thinkTagRegex);
+  private updateStreamingMessage(messageId: string | null, contentChunk: string): void {
+    if (!messageId) return;
 
-      if (match && match[1]) {
-        thoughts = match[1].trim();
-        finalContent = match[2] ? match[2].trim() : ''; // Content after </think> or empty if nothing follows
-      } else {
-        // If no <think> tags, the whole content is the message, and thoughts remain undefined
-        // This case is already handled by finalContent being initialized with message.content
+    this._messages.update(currentMessages => {
+      const messageIndex = currentMessages.findIndex(m => m.id === messageId);
+      if (messageIndex === -1) {
+        console.warn(`[ChatService] updateStreamingMessage: Message ID ${messageId} not found.`);
+        return currentMessages;
       }
 
       const updatedMessages = [...currentMessages];
+      const targetMessage = updatedMessages[messageIndex];
+
       updatedMessages[messageIndex] = {
-        ...message,
-        content: finalContent, // Use the parsed content (without thoughts block)
+        ...targetMessage,
+        content: contentChunk, 
+        isStreaming: true,
+        isError: false,
+        timestamp: new Date()
+      };
+      return updatedMessages;
+    });
+  }
+
+  private async finalizeStreamingMessage(messageId: string | null, isErrorEncountered: boolean = false): Promise<void> {
+    if (!messageId) return;
+
+    this._messages.update(currentMessages => {
+      const messageIndex = currentMessages.findIndex(m => m.id === messageId);
+      if (messageIndex === -1) {
+        console.warn(`[ChatService] finalizeStreamingMessage: Message ID ${messageId} not found.`);
+        return currentMessages;
+      }
+
+      const updatedMessages = [...currentMessages];
+      const targetMessage = updatedMessages[messageIndex];
+      
+      updatedMessages[messageIndex] = {
+        ...targetMessage,
         isStreaming: false,
-        metadata: {
-          ...message.metadata, // Preserve existing metadata
-          thoughts: thoughts,   // Add or overwrite thoughts
-        },
+        isError: isErrorEncountered,
+        timestamp: new Date()
       };
-      
-      this._messages.set(updatedMessages);
 
-      // Save the completed message to database
-      try {
-        await this.supabaseService.createMessage(
-          message.conversationId,
-          finalContent, // Save parsed content (without thoughts block)
-          message.role,
-          updatedMessages[messageIndex].metadata // Save updated metadata with thoughts
-        );
-      } catch (error) {
-        console.error('Failed to save completed message to database:', error);
+      if (isErrorEncountered && updatedMessages[messageIndex].metadata) {
+        updatedMessages[messageIndex].metadata!.isError = true;
+      } else if (isErrorEncountered) {
+        updatedMessages[messageIndex].metadata = { isError: true };
       }
-    }
-  }  /**
+      
+      return updatedMessages;
+    });
+    await new Promise(resolve => setTimeout(resolve, 0)); 
+  }
+
+  /**
    * Updates the system prompt for a conversation
    */
   async updateSystemPrompt(conversationId: string, systemPrompt: string): Promise<void> {
@@ -484,7 +408,7 @@ export class ChatService {
         settings: updatedSettings
       };
 
-      // Update in database - convert to JSON-compatible format
+      // Update in database
       await this.supabaseService.updateConversation(conversationId, {
         settings: JSON.parse(JSON.stringify(updatedSettings))
       });
@@ -516,6 +440,7 @@ export class ChatService {
     
     return this.getSystemPrompt(conversation?.settings);
   }
+
   /**
    * Gets the default system prompt
    */
@@ -523,121 +448,85 @@ export class ChatService {
     return this.systemPromptsService.getDefaultPrompt().template;
   }
 
-  // System Prompts Management Methods
-  
-  /**
-   * Get all available prompt templates
-   */
-  getAvailablePrompts() {
-    return this.systemPromptsService.getPromptTemplates();
-  }
-
-  /**
-   * Get the currently active prompt
-   */
-  getActivePrompt() {
-    return this.systemPromptsService.getActivePrompt();
-  }
-
-  /**
-   * Set the active prompt template
-   */
-  setActivePrompt(promptId: string): void {
-    this.systemPromptsService.setActivePrompt(promptId);
-  }
-
-  /**
-   * Get prompts by category
-   */
-  getPromptsByCategory(category: string) {
-    return this.systemPromptsService.getPromptsByCategory(category as any);
-  }
-
-  /**
-   * Get available prompt categories
-   */
-  getPromptCategories() {
-    return this.systemPromptsService.getAvailableCategories();
-  }
-  /**
-   * Creates a new conversation
-   */
-  async createConversation(title?: string, firstMessage?: string): Promise<Conversation> {
+  private async loadAvailableModels(): Promise<void> {
     try {
-      // Asegura que el perfil existe antes de crear la conversación
-      await this.authService.ensureUserProfile();
-      const conversationTitle = title || this.generateConversationTitle(firstMessage) || 'New Conversation';
-      console.log('[ChatService] Creando conversación:', conversationTitle);
+      const models = await this.supabaseService.getAIModels();
       
-      // Usar el modelo por defecto en lugar de hardcodear
-      const defaultModelId = this.getDefaultModelId();
-      console.log('[ChatService] Usando modelo por defecto para conversación:', defaultModelId);
-      
-      const conversation = await this.supabaseService.createConversation(
-        conversationTitle,
-        defaultModelId
-      );
-      console.log('[ChatService] Conversación creada en BD:', conversation);
-      const conversations = [...this._conversations(), conversation];
-      this._conversations.set(conversations);
-      this._currentConversation.set(conversation);
-      this._messages.set([]);
-
-      return conversation;
-    } catch (error) {
-      console.error('[ChatService] Error al crear conversación:', error);
-      throw error;
-    }
-  }
-  /**
-   * Loads a specific conversation
-   */
-  async loadConversation(conversationId: string): Promise<void> {
-    try {
-      const conversation = await this.supabaseService.getConversation(conversationId);
-      if (!conversation) {
-        throw new ChatError('Conversation not found', 'NOT_FOUND');
-      }
-
-      this._currentConversation.set(conversation);
-      
-      // Load messages for this conversation
-      const messages = await this.supabaseService.getMessages(conversationId);
-      this._messages.set(messages);
-
-    } catch (error) {
-      this.handleError(error as Error);
-    }
-  }
-  /**
-   * Deletes a conversation (soft delete)
-   */
-  async deleteConversation(conversationId: string): Promise<void> {
-    try {
-      await this.supabaseService.deleteConversation(conversationId);
-      
-      const conversations = this._conversations().filter(c => c.id !== conversationId);
-      this._conversations.set(conversations);
-
-      if (this._currentConversation()?.id === conversationId) {
-        this._currentConversation.set(null);
-        this._messages.set([]);
+      if (models.length === 0) {
+        const defaultModels: AIModel[] = [
+          {
+            id: 'gemma3:4b',
+            name: 'Gemma 3:4b',
+            provider: 'local',
+            description: 'Fast local model optimized for chat',
+            contextWindow: 8192,
+            isAvailable: true,
+            configuration: {}
+          },
+          {
+            id: 'claude-3-5-haiku',
+            name: 'Claude 3.5 Haiku',
+            provider: 'anthropic',
+            description: 'Fast and efficient Claude model',
+            contextWindow: 200000,
+            isAvailable: true,
+            configuration: {}
+          }
+        ];
+        this._availableModels.set(defaultModels);
+        this._defaultModel.set(defaultModels[0]);
+      } else {
+        this._availableModels.set(models);
+        
+        const defaultModel = models.find(m => m.id === 'gemma3:4b' && m.isAvailable) || 
+                           models.find(m => m.isAvailable) || 
+                           models[0];
+        this._defaultModel.set(defaultModel);
       }
     } catch (error) {
-      console.error('Failed to delete conversation:', error);
-      throw error;
+      console.error('[ChatService] ❌ Error loading models:', error);
+      const fallbackModels: AIModel[] = [
+        {
+          id: 'gemma3:4b',
+          name: 'Gemma 3:4b',
+          provider: 'local',
+          description: 'Default fallback model',
+          contextWindow: 8192,
+          isAvailable: true,
+          configuration: {}
+        }
+      ];
+      this._availableModels.set(fallbackModels);
+      this._defaultModel.set(fallbackModels[0]);
     }
   }
-  /**
-   * Adds a message to current conversation and saves to database
-   */
+
+  private async loadConversations(): Promise<void> {
+    try {
+      const currentUser = this.authStateService.getCurrentUser();
+      if (!currentUser) {
+        this._conversations.set([]);
+        return;
+      }
+      
+      const conversations = await this.supabaseService.getConversations();
+      this._conversations.set(conversations);
+      
+      if (conversations.length > 0 && !this._currentConversation()) {
+        this._currentConversation.set(conversations[0]);
+      }
+    } catch (error) {
+      console.error('[ChatService] ❌ Error loading conversations:', error);
+      this._conversations.set([]);
+    }
+  }
+
   private async addMessage(message: ChatMessage): Promise<void> {
-    // Add to local state immediately for UI responsiveness
-    const currentMessages = this._messages();
-    this._messages.set([...currentMessages, message]);
-
-    // Save to database
     try {
+      // Add to local state immediately for responsive UI
+      this._messages.update(msgs => [...msgs, message]);
+      
+      // Persist to database
       await this.supabaseService.createMessage(
         message.conversationId,
         message.content,
@@ -645,376 +534,210 @@ export class ChatService {
         message.metadata
       );
     } catch (error) {
-      console.error('Failed to save message to database:', error);
-      // Could implement retry logic or show error to user
+      console.error('[ChatService] ❌ Error adding message:', error);
     }
-  }  /**
-   * Loads available AI models - Now using Claude 3.5 Sonnet
+  }
+
+  private handleError(error: Error, context?: string): void {
+    console.error(`[ChatService] Error${context ? ' in ' + context : ''}:`, error);
+    if (error instanceof ChatError) {
+      this.addErrorMessageToUI(this.currentConversation()?.id || 'unknown', `Error: ${error.message} (${error.code})`);
+    } else {
+      this.addErrorMessageToUI(this.currentConversation()?.id || 'unknown', 'An unexpected error occurred.');
+    }
+  }
+
+  /**
+   * Formats a tool name for display.
    */
-  private async loadAvailableModels(): Promise<void> {
-    console.log('[ChatService] 🔄 Loading available models...');
-    
-    try {
-      // Get models from Supabase database
-      console.log('[ChatService] 📊 Fetching models from database...');
-      const dbModels = await this.supabaseService.getAIModels();
-      console.log('[ChatService] 📊 Database models loaded:', dbModels.length);
-      dbModels.forEach(model => {
-        console.log(`  - ${model.name} (${model.id}) [${model.provider}] - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
-      });      // Check Claude server availability (Express server for health check)
-      console.log('[ChatService] 🤖 Checking Claude Server availability...');
-      try {
-        const response = await fetch(`${this.EXPRESS_SERVER_URL}${this.HEALTH_ENDPOINT}`);
-        if (response.ok) {
-          const data = await response.json();
-          console.log('[ChatService] 🤖 Claude Server is available:', data);
-          
-          // Create Claude model if not in database
-          let claudeModels = dbModels.filter(model => model.provider === 'anthropic');
-          
-          if (claudeModels.length === 0) {
-            console.log('[ChatService] 🔄 Adding Claude model to available models');
-            claudeModels = [{
-              id: 'claude-3-5-sonnet-20241022',
-              name: 'Claude 3.5 Sonnet',
-              provider: 'anthropic',
-              description: 'Advanced reasoning with web search capabilities',
-              contextWindow: 200000,
-              isAvailable: true,
-              configuration: { is_default: true }
-            }];
-          }
-          
-          // Update availability for Claude models
-          const updatedModels = [
-            ...dbModels.filter(model => model.provider !== 'anthropic'),
-            ...claudeModels.map(model => ({ ...model, isAvailable: true }))
-          ];
-          
-          console.log('[ChatService] ✅ Models updated with Claude availability:');
-          updatedModels.forEach(model => {
-            console.log(`  - ${model.name} (${model.id}) - Available: ${model.isAvailable} - Default: ${model.configuration?.['is_default'] || false}`);
-          });
-          
-          this._availableModels.set(updatedModels);
-          this.setDefaultModel(updatedModels);
-          console.log('[ChatService] ✅ Models loaded successfully with Claude server');
-          return;
+  private formatToolName(toolName: string | undefined): string {
+    if (!toolName) return 'Unknown Tool';
+    return toolName
+      .split(/_|\s+/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  /**
+   * Adds a system message to indicate tool usage.
+   */
+  private addToolSystemMessage(conversationId: string, tool: string, status: 'pending' | 'success' | 'error'): string {
+    const toolMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      content: status === 'pending'
+        ? `Executing tool: ${this.formatToolName(tool)}...`
+        : `Tool ${this.formatToolName(tool)} ${status}.`,
+      role: 'system',
+      timestamp: new Date(),
+      conversationId: conversationId,
+      metadata: {
+        tool: tool,
+        toolStatus: status
+      }
+    };
+
+    this._messages.update(currentMessages => [...currentMessages, toolMessage]);
+    return toolMessage.id;
+  }
+
+  /**
+   * Updates an existing tool system message.
+   */
+  private updateToolSystemMessage(messageId: string, status: 'success' | 'error'): void {
+    this._messages.update(currentMessages => {
+      const messageIndex = currentMessages.findIndex(m =>
+        m.id === messageId &&
+        m.role === 'system' &&
+        m.metadata?.toolStatus === 'pending'
+      );
+
+      if (messageIndex === -1) {
+        console.warn(`[ChatService] updateToolSystemMessage: Pending tool system message ID ${messageId} not found.`);
+        return currentMessages;
+      }
+
+      const updatedMessages = [...currentMessages];
+      const originalMessage = updatedMessages[messageIndex];
+      const toolName = originalMessage.metadata?.tool || 'Unknown Tool'; 
+      
+      updatedMessages[messageIndex] = {
+        ...originalMessage,
+        content: `Tool ${this.formatToolName(toolName)} ${status}.`,
+        timestamp: new Date(),
+        metadata: {
+          ...originalMessage.metadata,
+          toolStatus: status
         }
-      } catch (claudeError) {
-        console.warn('[ChatService] ⚠️ Could not connect to Claude server, using database models only:', claudeError);
+      };
+      return updatedMessages;
+    });
+  }
+
+  /**
+   * Adds the list of used tools to the assistant's message metadata.
+   */
+  private addToolsUsedToMessage(messageId: string | null, toolsUsed: string[]): void {
+    if (!messageId || toolsUsed.length === 0) {
+      return;
+    }
+
+    this._messages.update(currentMessages => {
+      const messageIndex = currentMessages.findIndex(m => m.id === messageId && m.role === 'assistant');
+      if (messageIndex === -1) {
+        console.warn(`[ChatService] addToolsUsedToMessage: Assistant message ID ${messageId} not found.`);
+        return currentMessages;
+      }
+
+      const updatedMessages = [...currentMessages];
+      const targetMessage = updatedMessages[messageIndex];
+
+      const existingMetadata = targetMessage.metadata || {};
+      const existingToolsUsed = existingMetadata.toolsUsed || [];
+      
+      const newToolsUsed = Array.from(new Set([...existingToolsUsed, ...toolsUsed]));
+
+      updatedMessages[messageIndex] = {
+        ...targetMessage,
+        metadata: {
+          ...existingMetadata,
+          toolsUsed: newToolsUsed
+        }
+      };
+      return updatedMessages;
+    });
+  }
+
+  /**
+   * Creates a new conversation
+   */
+  async createConversation(title?: string, initialMessage?: string): Promise<void> {
+    try {
+      const currentUser = this.authStateService.getCurrentUser();
+      if (!currentUser) {
+        throw new ChatError('User must be authenticated to create conversations', 'AUTH_REQUIRED');
       }
       
-      // Use database models as-is if Claude server is not available
-      console.log('[ChatService] 📊 Using database models without Claude server sync');
-      this._availableModels.set(dbModels);
-      this.setDefaultModel(dbModels);
+      const conversationTitle = title || 
+        (initialMessage ? this.generateTitleFromMessage(initialMessage) : 'New Conversation');
       
+      const newConversation = await this.supabaseService.createConversation(
+        conversationTitle,
+        this.getDefaultModelId()
+      );
+      
+      this._conversations.update(conversations => [newConversation, ...conversations]);
+      this._currentConversation.set(newConversation);
+      this._messages.set([]);
     } catch (error) {
-      console.error('[ChatService] ❌ Failed to load models from database:', error);
-      
-      // Fallback to Claude model
-      const fallbackModels: AIModel[] = [
-        {
-          id: 'claude-3-5-sonnet-20241022',
-          name: 'Claude 3.5 Sonnet',
-          provider: 'anthropic',
-          description: 'Advanced reasoning with web search capabilities',
-          contextWindow: 200000,
-          isAvailable: false,
-          configuration: { is_default: true }
-        }
-      ];
-      console.log('[ChatService] 🔄 Using fallback Claude model:', fallbackModels);
-      this._availableModels.set(fallbackModels);
-      this.setDefaultModel(fallbackModels);
+      console.error('[ChatService] ❌ Error creating conversation:', error);
+      throw error;
     }
   }
+
   /**
-   * Loads conversations from Supabase
+   * Loads a specific conversation and its messages
    */
-  private async loadConversations(): Promise<void> {
+  async loadConversation(conversationId: string): Promise<void> {
     try {
-      const conversations = await this.supabaseService.getConversations();
-      this._conversations.set(conversations);
-    } catch (error) {
-      console.error('Failed to load conversations:', error);
-    }
-  }
-  /**
-   * Gets messages for a specific conversation from Supabase
-   */
-  private async getConversationMessages(conversationId: string): Promise<ChatMessage[]> {
-    try {
-      return await this.supabaseService.getMessages(conversationId);
-    } catch (error) {
-      console.error('Failed to load messages:', error);
-      return [];
-    }
-  }
-
-  /**
-   * Handles streaming errors
-   */
-  private handleStreamError(error: Error, messageId: string): void {
-    const currentMessages = this._messages();
-    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
-    
-    if (messageIndex >= 0) {
-      const updatedMessages = [...currentMessages];
-      updatedMessages[messageIndex] = {
-        ...updatedMessages[messageIndex],
-        content: 'Sorry, I encountered an error while processing your request.',
-        isStreaming: false,
-        isError: true
-      };
+      const conversation = this._conversations().find(c => c.id === conversationId);
+      if (!conversation) {
+        throw new ChatError('Conversation not found', 'NOT_FOUND');
+      }
       
-      this._messages.set(updatedMessages);
-    }
-
-    this.handleError(error);
-  }  /**
-   * Central error handling
-   */
-  private handleError(error: Error): void {    
-    console.error('Chat service error:', error);
-    
-    if (error instanceof ChatError) {
-      // Handle specific chat errors
-      console.error(`Chat Error [${(error as ChatError).code}]:`, error.message);
-    } else {
-      // Handle general errors
-      console.error('Unexpected error:', error);
+      this._currentConversation.set(conversation);
+      
+      const messages = await this.supabaseService.getMessages(conversationId);
+      this._messages.set(messages);
+    } catch (error) {
+      console.error('[ChatService] ❌ Error loading conversation:', error);
+      throw error;
     }
   }
 
   /**
-   * Generate a smart conversation title from the first message
+   * Deletes a conversation
    */
-  private generateConversationTitle(firstMessage?: string): string | null {
-    if (!firstMessage) return null;
-    
-    // Clean the message and truncate if too long
-    const cleaned = firstMessage.trim().replace(/\n+/g, ' ');
-    
-    // If message is short enough, use it as title
-    if (cleaned.length <= 50) {
-      return cleaned;
+  async deleteConversation(conversationId: string): Promise<void> {
+    try {
+      await this.supabaseService.deleteConversation(conversationId);
+      
+      this._conversations.update(conversations => 
+        conversations.filter(c => c.id !== conversationId)
+      );
+      
+      if (this._currentConversation()?.id === conversationId) {
+        this._currentConversation.set(null);
+        this._messages.set([]);
+      }
+    } catch (error) {
+      console.error('[ChatService] ❌ Error deleting conversation:', error);
+      throw error;
     }
-    
-    // Try to find a natural break point
-    const words = cleaned.split(' ');
-    let title = '';
-    
-    for (const word of words) {
-      if ((title + word).length > 50) break;
-      title += (title ? ' ' : '') + word;
-    }
-    
-    // Add ellipsis if truncated
-    return title + (title.length < cleaned.length ? '...' : '');
   }
 
   /**
-   * Gets the default AI model from database configuration
+   * Gets the default model
    */
   getDefaultModel(): AIModel | null {
     return this._defaultModel();
   }
+
   /**
-   * Gets the default model ID for use in chat requests
+   * Gets the default model ID
    */
   getDefaultModelId(): string {
     const defaultModel = this._defaultModel();
-    
-    if (defaultModel) {
-      console.log('[ChatService] 📌 Usando modelo predeterminado:', defaultModel.name, `(${defaultModel.id})`);
-      return defaultModel.id;
-    }
-    
-    // Si no hay modelo predeterminado configurado, usar Gemma 3:4b como fallback
-    console.log('[ChatService] ⚠️ No hay modelo predeterminado configurado, usando Gemma 3:4b como fallback');
-    
-    // Verificar si Gemma 3:4b existe en la lista de modelos
-    const models = this._availableModels();
-    const gemmaModel = models.find(m => m.id === 'gemma3:4b');
-    
-    if (gemmaModel) {
-      console.log('[ChatService] ✅ Modelo Gemma 3:4b encontrado y disponible');
-    } else {
-      console.log('[ChatService] ⚠️ Modelo Gemma 3:4b no encontrado en la lista de modelos disponibles');
-    }
-    
-    return 'gemma3:4b'; // Fallback to Gemma 3:4b
-  }  /**
-   * Sets the default model based on database configuration
-   */  private setDefaultModel(models: AIModel[]): void {
-    console.log('[ChatService] 🔍 Seleccionando modelo predeterminado...');
-    
-    // SIEMPRE crear un modelo Gemma 3:4b virtual si no existe en la lista
-    let gemmaModel = models.find(m => m.id === 'gemma3:4b');
-    
-    if (!gemmaModel && models.length > 0) {
-      // Si no existe el modelo Gemma pero hay otros modelos, crea una versión virtual
-      console.log('[ChatService] ⚠️ Modelo Gemma 3:4b no encontrado, creando versión virtual');
-      gemmaModel = {
-        id: 'gemma3:4b',
-        name: 'Gemma 3:4b',
-        provider: 'local',
-        description: 'Gemma 3:4b model running locally via Ollama',
-        contextWindow: 32768,
-        isAvailable: true,
-        configuration: { 'is_default': true }
-      };
-      
-      // Añadir el modelo Gemma al principio de la lista para que aparezca primero en el selector
-      const updatedModels = [gemmaModel, ...models];
-      this._availableModels.set(updatedModels);
-      console.log('[ChatService] ✅ Modelo Gemma 3:4b añadido a la lista de modelos disponibles');
-    }
-    
-    // Siempre establecer Gemma como modelo predeterminado si existe
-    if (gemmaModel) {
-      this._defaultModel.set(gemmaModel);
-      console.log('[ChatService] ✅ Modelo Gemma 3:4b establecido como predeterminado:', gemmaModel.name, `(${gemmaModel.id})`);
-      return;
-    }
-    
-    // Fallback: si por alguna razón no se pudo encontrar o crear Gemma, usar configuración de DB
-    const configuredDefault = models.find(model => 
-      model.configuration && 
-      typeof model.configuration === 'object' && 
-      'is_default' in model.configuration && 
-      model.configuration['is_default'] === true
-    );
-    
-    if (configuredDefault) {
-      this._defaultModel.set(configuredDefault);
-      console.log('[ChatService] ⚠️ Usando modelo configurado en DB como predeterminado:', configuredDefault.name, `(${configuredDefault.id})`);
-      return;
-    }
-    
-    // Último recurso: usar cualquier modelo disponible
-    const availableModel = models.find(m => m.isAvailable) || (models.length > 0 ? models[0] : null);
-    
-    if (availableModel) {
-      this._defaultModel.set(availableModel);
-      console.log('[ChatService] ⚠️ Usando modelo alternativo como predeterminado:', availableModel.name, `(${availableModel.id})`);
-    } else {
-      console.log('[ChatService] ❌ No hay modelos disponibles para establecer como predeterminado');
-    }
+    return defaultModel?.id || 'gemma3:4b';
   }
 
   /**
-   * Agrega las herramientas usadas al metadata del mensaje
+   * Generates a conversation title from the first message
    */
-  private addToolsUsedToMessage(messageId: string, toolsUsed: string[]): void {
-    const currentMessages = this._messages();
-    const messageIndex = currentMessages.findIndex(m => m.id === messageId);
-    if (messageIndex >= 0) {
-      const updatedMessages = [...currentMessages];
-      updatedMessages[messageIndex] = {
-        ...updatedMessages[messageIndex],
-        metadata: {
-          ...updatedMessages[messageIndex].metadata,
-          toolsUsed: toolsUsed
-        }
-      };
-      this._messages.set(updatedMessages);
+  private generateTitleFromMessage(message: string): string {
+    const cleanMessage = message.trim().replace(/\n/g, ' ');
+    if (cleanMessage.length <= 50) {
+      return cleanMessage;
     }
-  }
-
-  /**
-   * Inserta un mensaje de sistema para indicar la ejecución de una herramienta
-   */
-  private addToolSystemMessage(conversationId: string, tool: string, status: 'pending' | 'success' | 'error'): string {
-    const id = crypto.randomUUID();
-    const content = status === 'pending'
-      ? `🔎 Ejecutando herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}...`
-      : status === 'success'
-        ? `✅ Herramienta ejecutada: ${this.toolBadgeLabel(tool ?? 'unknown')}`
-        : `❌ Error al ejecutar herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}`;
-    const msg: ChatMessage = {
-      id,
-      content,
-      role: 'system',
-      timestamp: new Date(),
-      conversationId,
-      metadata: { tool, toolStatus: status }
-    };
-    this._messages.set([...this._messages(), msg]);
-    return id;
-  }
-
-  /**
-   * Actualiza el mensaje de sistema de herramienta
-   */
-  private updateToolSystemMessage(messageId: string, status: 'success' | 'error') {
-    const currentMessages = this._messages();
-    const idx = currentMessages.findIndex(m => m.id === messageId);
-    if (idx >= 0) {
-      const tool = currentMessages[idx].metadata?.tool;
-      const updatedMessages = [...currentMessages];
-      updatedMessages[idx] = {
-        ...updatedMessages[idx],
-        content: status === 'success'
-          ? `✅ Herramienta ejecutada: ${this.toolBadgeLabel(tool ?? 'unknown')}`
-          : `❌ Error al ejecutar herramienta: ${this.toolBadgeLabel(tool ?? 'unknown')}`,
-        metadata: { ...updatedMessages[idx].metadata, toolStatus: status }
-      };
-      this._messages.set(updatedMessages);
-    }
-  }  /**
-   * Devuelve un label amigable para la herramienta usada
-   */
-  private toolBadgeLabel(tool: string): string {
-    switch (tool) {
-      case 'AI Agent':
-        return 'Agente IA';
-      case 'searchWeb':
-      case 'braveSearch':
-      case 'web_search':
-        return 'Búsqueda Web';
-      case 'analyzeWeb':
-      case 'web_analyze':
-        return 'Análisis Web';
-      case 'googleCalendar':
-      case 'google_calendar':
-        return 'Google Calendar';
-      case 'googleDrive':
-      case 'google_drive':
-      case 'listGoogleDriveFiles':
-      case 'uploadGoogleDriveFile':
-      case 'shareGoogleDriveFile':
-      case 'createGoogleDriveFolder':
-        return 'Google Drive';
-      case 'analyzeDocument':
-      case 'document_analyzer':
-        return 'Analizador de Documentos';
-      case 'perplexity':
-      case 'perplexitySearch':
-        return 'Perplexity Search';
-      case 'tavily':
-      case 'tavilySearch':
-        return 'Tavily Search';
-      case 'fetch':
-      case 'fetchUrl':
-        return 'Obtener URL';
-      case 'duckduckgo':
-      case 'duckduckgoSearch':
-        return 'DuckDuckGo Search';
-      default:
-        // Si no encontramos un mapeo específico, formatear el nombre
-        return tool.charAt(0).toUpperCase() + tool.slice(1).replace(/([A-Z])/g, ' $1');
-    }
-  }
-
-  /**
-   * Remueve un mensaje de sistema de herramienta
-   */
-  private removeToolSystemMessage(messageId: string): void {
-    const currentMessages = this._messages();
-    const filteredMessages = currentMessages.filter(m => m.id !== messageId);
-    this._messages.set(filteredMessages);
+    return cleanMessage.substring(0, 47) + '...';
   }
 }

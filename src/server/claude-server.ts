@@ -22,7 +22,8 @@ import { GoogleDriveService } from './services/google-drive.service';
 import { buildSystemPrompt, buildContextAwarePrompt, initializePromptCache, getPromptCacheStats } from './ai/prompts';
 
 // AI Services
-import { RetryService } from './ai/services/retry.service';
+import { RetryService, createOverloadedRetryWrapper } from './ai/services/retry.service';
+import { MockResponseService } from './ai/services/mock-response.service';
 
 // Types
 import { ChatMessage, ChatResponse, CalendarEvent, GoogleDriveFile } from './types';
@@ -62,6 +63,73 @@ let googleDriveService: GoogleDriveService;
 // Auth tokens for current request
 let currentRequestAuthTokens: { calendar?: string; drive?: string } = {};
 
+// Tool tracking for current request
+let toolExecutionTracker: Array<{
+  name: string;
+  input: any;
+  output: any;
+  timestamp: string;
+  executionTime: number;
+}> = [];
+
+/**
+ * Track tool execution for the current request
+ */
+function trackToolExecution(toolName: string, input: any, output: any, executionTime: number): void {
+  toolExecutionTracker.push({
+    name: toolName,
+    input,
+    output,
+    timestamp: new Date().toISOString(),
+    executionTime
+  });
+}
+
+/**
+ * Get and clear tool tracking for current request
+ */
+function getAndClearToolTracking(): Array<{
+  name: string;
+  input: any;
+  output: any;
+  timestamp: string;
+  executionTime: number;
+}> {
+  const tools = [...toolExecutionTracker];
+  toolExecutionTracker = [];
+  return tools;
+}
+
+/**
+ * Wrap tool execution with tracking
+ */
+function createTrackedTool<TInput, TOutput>(
+  toolName: string,
+  toolFunction: (input: TInput) => Promise<TOutput>
+): (input: TInput) => Promise<TOutput> {
+  return async (input: TInput): Promise<TOutput> => {
+    const startTime = Date.now();
+    
+    try {
+      const result = await toolFunction(input);
+      const executionTime = Date.now() - startTime;
+      
+      trackToolExecution(toolName, input, result, executionTime);
+      return result;
+    } catch (error) {
+      const executionTime = Date.now() - startTime;
+      
+      const errorResult = { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error' 
+      } as TOutput;
+      
+      trackToolExecution(toolName, input, errorResult, executionTime);
+      return errorResult;
+    }
+  };
+}
+
 /**
  * Initialize environment and services
  */
@@ -73,8 +141,6 @@ function initializeEnvironment(): void {
   braveSearchService = new BraveSearchService(config.braveSearchApiKey || '');
   googleCalendarService = new GoogleCalendarService();
   googleDriveService = new GoogleDriveService();
-  
-  console.log('✅ RetryService configured for Claude API calls');
 }
 
 /**
@@ -94,10 +160,10 @@ async function initializeGenkit(): Promise<void> {
 }
 
 /**
- * Define all tools using ai.defineTool()
+ * Define all tools using ai.defineTool() with tracking
  */
 function defineTools(): void {
-  // Search Web Tool
+  // Search Web Tool with tracking
   ai.defineTool(
     {
       name: 'searchWeb',
@@ -116,7 +182,7 @@ function defineTools(): void {
         message: z.string()
       })
     },
-    async (input: { query: string; limit?: number }) => {
+    createTrackedTool('Brave Search', async (input: { query: string; limit?: number }) => {
       try {
         if (!EnvironmentConfig.getConfig().braveSearchApiKey) {
           return {
@@ -139,9 +205,8 @@ function defineTools(): void {
           message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`
         };
       }
-    }
-  );
-  // Google Calendar Tool
+    })
+  );  // Google Calendar Tool with tracking
   ai.defineTool(
     {
       name: 'listCalendarEvents',
@@ -164,7 +229,7 @@ function defineTools(): void {
         message: z.string()
       })
     },
-    async (input: { startDate: string; endDate: string; maxResults?: number }) => {
+    createTrackedTool('Google Calendar', async (input: { startDate: string; endDate: string; maxResults?: number }) => {
       try {
         const token = currentRequestAuthTokens.calendar;
         if (!token) {
@@ -184,17 +249,8 @@ function defineTools(): void {
             date.setHours(0, 0, 0, 0);
           }
           return date.toISOString();
-        };
-
-        const timeMin = formatToRFC3339(input.startDate);
+        };        const timeMin = formatToRFC3339(input.startDate);
         const timeMax = formatToRFC3339(input.endDate, true);
-        
-        console.log('📅 Converted dates to RFC3339:', { 
-          originalStartDate: input.startDate,
-          originalEndDate: input.endDate,
-          timeMin,
-          timeMax
-        });
 
         const result = await googleCalendarService.listEvents(
           token, 'primary', timeMin, timeMax, input.maxResults
@@ -222,17 +278,15 @@ function defineTools(): void {
             message: errorResult.error || 'Error al obtener eventos'
           };
         }
-      } catch (error) {
-        return {
+      } catch (error) {        return {
           success: false,
           events: [],
           message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`
         };
       }
-    }
+    })
   );
-
-  // Google Drive Tool
+  // Google Drive Tool with tracking
   ai.defineTool(
     {
       name: 'listDriveFiles',
@@ -255,7 +309,7 @@ function defineTools(): void {
         message: z.string()
       })
     },
-    async (input: { query?: string; maxResults?: number; folderId?: string }) => {
+    createTrackedTool('Google Drive', async (input: { query?: string; maxResults?: number; folderId?: string }) => {
       try {
         const token = currentRequestAuthTokens.drive;
         if (!token) {
@@ -264,7 +318,9 @@ function defineTools(): void {
             files: [],
             message: 'Token de Google Drive no disponible'
           };
-        }        const result = await googleDriveService.listFiles(
+        }
+
+        const result = await googleDriveService.listFiles(
           token, input.query, input.maxResults, undefined, undefined, input.folderId
         ) as DriveServiceResponse;
 
@@ -297,10 +353,9 @@ function defineTools(): void {
           message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`
         };
       }
-    }
+    })
   );
-
-  // Refresh Tokens Tool
+  // Refresh Tokens Tool with tracking
   ai.defineTool(
     {
       name: 'refreshGoogleTokens',
@@ -315,7 +370,7 @@ function defineTools(): void {
         driveTokenRefreshed: z.boolean().optional()
       })
     },
-    async (input: { userId: string }) => {
+    createTrackedTool('Token Refresh', async (input: { userId: string }) => {
       try {
         const { createClient } = require('@supabase/supabase-js');
         const supabase = createClient(
@@ -344,15 +399,14 @@ function defineTools(): void {
           calendarTokenRefreshed: true,
           driveTokenRefreshed: true
         };
-      } catch (error) {
-        return {
+      } catch (error) {        return {
           success: false,
           message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`,
           calendarTokenRefreshed: false,
           driveTokenRefreshed: false
         };
       }
-    }
+    })
   );
 }
 
@@ -369,34 +423,60 @@ async function processChatRequest(
     // Store tokens for current request
     currentRequestAuthTokens = authTokens || {};
 
-    if (!ai) {
-      throw new Error('AI instance not initialized');
+    // Check if we should use mock mode
+    const config = EnvironmentConfig.getConfig();
+    const shouldUseMock = MockResponseService.shouldUseMockMode(config);
+
+    if (shouldUseMock) {
+      console.log('🎭 [MockMode] Using mock response due to configuration or recent 529 errors');
+      const mockResponse = MockResponseService.generateMockResponse(message, conversationId);
+      
+      return {
+        success: mockResponse.success,
+        message: mockResponse.message,
+        conversationId: mockResponse.conversationId,
+        model: 'claude-3-5-haiku-mock',
+        usage: {
+          inputTokens: message.length / 4, // Rough token estimation
+          outputTokens: mockResponse.message.length / 4,
+          totalTokens: (message.length + mockResponse.message.length) / 4
+        },
+        toolCalls: mockResponse.toolCalls?.map(tool => ({
+          name: tool.toolName,
+          input: { query: message },
+          output: { status: tool.status, executionTime: tool.executionTime }
+        })) || [],
+        timestamp: new Date().toISOString()
+      };
     }
 
-    // Build context-aware system prompt
+    if (!ai) {
+      throw new Error('AI instance not initialized');
+    }    // Build context-aware system prompt
     const systemPrompt = buildContextAwarePrompt(false, conversationLength);
     
     // Create user prompt with clear context
-    const userPrompt = `${message}`;    console.log('🤖 Using system prompt length:', systemPrompt.length, 'characters');
-    console.log('💬 User message:', message.substring(0, 100) + (message.length > 100 ? '...' : ''));
+    const userPrompt = `${message}`;
 
-    // Use retry service to handle potential Claude API failures (529 errors, rate limits, timeouts)
-    const response = await RetryService.withRetry(
-      async () => {
-        return await ai.generate({
-          model: claude35Haiku,
-          prompt: systemPrompt + '\n\nUsuario: ' + userPrompt,
-          tools: ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
-        });
-      },
-      {
-        maxAttempts: 6,
-        initialDelay: 2000,
-        maxDelay: 60000,
-        multiplier: 2.5,
-        jitter: true
-      }
-    );
+    // Use specialized retry service for 529 overloaded errors
+    const overloadedRetryWrapper = createOverloadedRetryWrapper();
+    const response = await overloadedRetryWrapper(async () => {
+      return await ai.generate({
+        model: claude35Haiku,
+        prompt: systemPrompt + '\n\nUsuario: ' + userPrompt,
+        tools: ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
+      });
+    });
+
+    // Get tracked tools instead of relying on Genkit response
+    const trackedTools = getAndClearToolTracking();
+    
+    // Map tracked tools to expected format
+    const toolCalls = trackedTools.map(tool => ({
+      name: tool.name,
+      input: tool.input,
+      output: tool.output
+    }));
 
     return {
       success: true,
@@ -407,15 +487,37 @@ async function processChatRequest(
         inputTokens: response.usage?.inputTokens || 0,
         outputTokens: response.usage?.outputTokens || 0,
         totalTokens: response.usage?.totalTokens || 0
-      },      toolCalls: response.toolRequests?.map((req: any) => ({
-        name: req.name,
-        input: req.input,
-        output: req.output
-      })) || [],
+      },
+      toolCalls, // Use our tracked tools
       timestamp: new Date().toISOString()
     };
-  } catch (error) {
+  } catch (error: any) {
     console.error('❌ Chat processing error:', error);
+    
+    // If this is a 529 error or overload, try to use mock as fallback
+    if (error?.status === 529 || error?.message?.toLowerCase().includes('overloaded')) {
+      console.log('🎭 [Fallback] Using mock response due to 529 error after all retries');
+      const mockResponse = MockResponseService.generateMockResponse(message, conversationId);
+      
+      return {
+        success: true,
+        message: mockResponse.message + '\n\n⚠️ *Esta respuesta fue generada en modo de emergencia debido a sobrecarga del servidor de Anthropic.*',
+        conversationId: mockResponse.conversationId,
+        model: 'claude-3-5-haiku-fallback',
+        usage: {
+          inputTokens: message.length / 4,
+          outputTokens: mockResponse.message.length / 4,
+          totalTokens: (message.length + mockResponse.message.length) / 4
+        },
+        toolCalls: mockResponse.toolCalls?.map(tool => ({
+          name: tool.toolName,
+          input: { query: message },
+          output: { status: tool.status, executionTime: tool.executionTime }
+        })) || [],
+        timestamp: new Date().toISOString()
+      };
+    }
+    
     throw error;
   }
 }

@@ -11,6 +11,7 @@ export interface ServerConfig {
   port: number;
   corsOrigins: string[];
   isDevelopment: boolean;
+  enableMockMode?: boolean; // For testing when Anthropic API is down
 }
 
 export class EnvironmentConfig {
@@ -65,15 +66,17 @@ export class EnvironmentConfig {
     // En modo desarrollo, permitir keys mockeadas
     if (NODE_ENV === 'development' && (!process.env['ANTHROPIC_API_KEY'] || !process.env['BRAVE_SEARCH_API_KEY'])) {
       console.warn('⚠️ Using mock API keys in development mode');
-    }
+    }    const enableMockMode = process.env['ENABLE_MOCK_MODE'] === 'true' || 
+                          (NODE_ENV === 'development' && !process.env['ANTHROPIC_API_KEY']);
 
     return {
       anthropicApiKey: ANTHROPIC_API_KEY,
       braveSearchApiKey: BRAVE_SEARCH_API_KEY,
       port: PORT,
       corsOrigins: ['http://localhost:4200', 'http://localhost:3000'],
-      isDevelopment: NODE_ENV === 'development'
-    };  }
+      isDevelopment: NODE_ENV === 'development',
+      enableMockMode: enableMockMode
+    };}
 }
 
 // Legacy exports for backwards compatibility
