@@ -13,12 +13,11 @@ import {
 import { CommonModule } from '@angular/common';
 import { ChatMessage } from '../../../../shared/models/chat.models';
 import { MessageFormatterService } from '../../services/message-formatter.service';
-import { MessageAttachmentsComponent } from '../message-attachments/message-attachments.component';
 
 @Component({
   selector: 'app-message-content',
   standalone: true,
-  imports: [CommonModule, MessageAttachmentsComponent],
+  imports: [CommonModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="message-content" [class.user-message]="message().role === 'user'" [class.assistant-message]="message().role === 'assistant'">
@@ -66,12 +65,6 @@ import { MessageAttachmentsComponent } from '../message-attachments/message-atta
           }
         }
       </div>
-
-      <!-- Message Attachments -->
-      <app-message-attachments
-        [attachments]="attachments()"
-        class="message-attachments">
-      </app-message-attachments>
 
       <!-- Message Actions -->
       @if (!message().isStreaming && !message().isError) {

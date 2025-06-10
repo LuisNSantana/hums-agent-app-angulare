@@ -151,13 +151,24 @@ export class ChatService {
         content: m.content
       }));
 
-      // Prepare documents for analysis if any PDF attachments are present
+      // Prepare documents for analysis for all supported document types (PDF, TXT, etc)
       let documentsForAnalysis: any[] = [];
       if (request.attachments && request.attachments.length > 0) {
         documentsForAnalysis = request.attachments
-          .filter(attachment => attachment.type === 'document' && 
-                              attachment.mimeType === 'application/pdf' && 
-                              attachment.base64)
+          .filter(attachment => 
+            attachment.type === 'document' && 
+            attachment.base64 && 
+            (
+              // Incluir múltiples tipos MIME de documentos soportados
+              attachment.mimeType === 'application/pdf' ||
+              attachment.mimeType === 'text/plain' ||
+              attachment.mimeType === 'application/msword' ||
+              attachment.mimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+              attachment.mimeType === 'application/vnd.ms-excel' ||
+              attachment.mimeType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+              attachment.mimeType === 'text/csv'
+            )
+          )
           .map(attachment => ({
             file: attachment.base64,
             fileName: attachment.name,

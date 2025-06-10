@@ -38,7 +38,7 @@ import { MessageFormatterService } from '../../services/message-formatter.servic
                   <line x1="10" y1="9" x2="8" y2="9"/>
                 </svg>
               </div>
-              <span class="document-type">PDF</span>
+              <span class="document-type">{{ formatter.getFileTypeFromMime(attachment.mimeType) }}</span>
             </div>
           }
           <div class="attachment-info">

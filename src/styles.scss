@@ -49,6 +49,14 @@
   --mat-app-on-error: #ffffff;
     /* Border and Divider Colors */
   --mat-app-border: rgba(255, 255, 255, 0.12);
+  
+  /* Table Styles */
+  --table-header-bg: #1e1e2f;
+  --table-row-odd-bg: #14141f;
+  --table-row-even-bg: #1a1a25;
+  --table-border-color: rgba(255, 255, 255, 0.08);
+  --table-text-color: #e0e0e0;
+  --table-header-text-color: #ffffff;
   --mat-app-border-variant: rgba(255, 255, 255, 0.16);
   --mat-app-outline-variant: rgba(255, 255, 255, 0.14);
   --mat-app-divider: rgba(255, 255, 255, 0.08);
@@ -115,7 +123,105 @@ html, body {
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--mat-app-primary);
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* ===== DOCUMENT HEADERS STYLING ===== */
+.document-main-title {
+  font-size: 1.3rem;
+  font-weight: 600;
+  color: var(--mat-app-primary);
+  margin: 1.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--mat-app-primary-light);
+}
+
+.document-section-title {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--mat-app-accent);
+  margin: 1.2rem 0 0.8rem;
+}
+
+.document-subsection-title {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--mat-app-secondary);
+  margin: 1rem 0 0.6rem;
+}
+
+.section-emoji-header {
+  font-size: 1.1rem;
+  margin: 1rem 0 0.4rem;
+}
+
+/* ===== FORMATTED DATA TABLES IN CHAT MESSAGES ===== */
+.data-table-wrapper {
+  margin: 1rem 0;
+  overflow-x: auto;
+  background: var(--mat-app-surface-container);
+  border-radius: 8px;
+  border: 1px solid var(--table-border-color);
+}
+
+.formatted-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.92rem;
+  color: var(--table-text-color);
+  overflow: hidden;
+}
+
+.formatted-table th {
+  background: var(--table-header-bg);
+  color: var(--table-header-text-color);
+  font-weight: 500;
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid var(--table-border-color);
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+
+.formatted-table tr:nth-child(odd) {
+  background-color: var(--table-row-odd-bg);
+}
+
+.formatted-table tr:nth-child(even) {
+  background-color: var(--table-row-even-bg);
+}
+
+.formatted-table td {
+  padding: 0.6rem 1rem;
+  border-bottom: 1px solid var(--table-border-color);
+}
+
+.formatted-table tbody tr:hover {
+  background: rgba(115, 103, 240, 0.08);
+}
+
+/* Estilos para tablas financieras */
+.formatted-table td:first-child {
+  font-weight: 500;
+}
+
+/* Destacar valores monetarios */
+.formatted-table td:nth-child(2) {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Responsive para pantallas pequeñas */
+@media (max-width: 768px) {
+  .formatted-table {
+    font-size: 0.85rem;
+  }
+  
+  .formatted-table th, 
+  .formatted-table td {
+    padding: 0.5rem 0.75rem;
+  }
 }
 
 /* Text Selection */

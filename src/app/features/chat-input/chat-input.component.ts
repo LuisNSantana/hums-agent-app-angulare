@@ -61,7 +61,7 @@ import { ChatService } from '../../core/services/chat.service';
           <!-- Character counter -->
           <div class="char-counter" [class.warning]="isNearLimit()">
             {{ message().length }}/32000
-          </div>        </div>        <!-- Attached Images Preview -->
+          </div>        </div>        <!-- Attached Files Preview -->
         @if (currentAttachments().length > 0) {
           <div class="attachments-preview">
             @for (attachment of currentAttachments(); track attachment.id) {
@@ -69,14 +69,11 @@ import { ChatService } from '../../core/services/chat.service';
                 @if (attachment.type === 'image') {
                   <img [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
                 } @else if (attachment.type === 'document') {
-                  <div class="document-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                      <polyline points="14,2 14,8 20,8"/>
-                      <line x1="16" y1="13" x2="8" y2="13"/>
-                      <line x1="16" y1="17" x2="8" y2="17"/>
-                      <line x1="10" y1="9" x2="8" y2="9"/>
-                    </svg>
+                  <div 
+                    class="document-icon"
+                    [class]="getDocumentIconClass(attachment.name)"
+                    [title]="getDocumentTypeLabel(attachment.name)"
+                    [innerHTML]="getDocumentIconSvg(attachment.name)">
                   </div>
                 }
                 <div class="attachment-info">
@@ -300,13 +297,13 @@ export class ChatInputComponent {
     const target = event.target as HTMLSelectElement;
     this.modelChanged.emit(target.value);
   }  /**
-   * Handle file attachment (supports both documents and images for multimodal)
+   * Handle file attachment (supports documents and images for multimodal)
    */
   onAttachFile(): void {
     const input = document.createElement('input');
     input.type = 'file';
-    // Extended to support images for multimodal capabilities with Gemma 3 and PDFs for document analysis
-    input.accept = '.txt,.md,.pdf,.doc,.docx,.json,.csv,.jpg,.jpeg,.png,.gif,.bmp,.webp';
+    // Support all document formats handled by DocumentAnalyzer + images for multimodal
+    input.accept = '.pdf,.doc,.docx,.txt,.csv,.xls,.xlsx,.tsv,.md,.json,.jpg,.jpeg,.png,.gif,.bmp,.webp';
     input.multiple = false; // For now, single file only
     
     input.onchange = async (event) => {
@@ -315,12 +312,13 @@ export class ChatInputComponent {
         // Check if it's an image for multimodal support
         if (file.type.startsWith('image/')) {
           await this.handleImageAttachment(file);
-        } else if (file.type === 'application/pdf') {
-          // Handle PDF files for document analysis
+        } else if (this.isSupportedDocumentType(file)) {
+          // Handle all supported document types for analysis
           await this.handleDocumentAttachment(file);
         } else {
-          // Handle other document files as before
-          this.fileAttached.emit(file);
+          // Fallback for unsupported files
+          console.warn('[ChatInput] ⚠️ Unsupported file type:', file.type);
+          // TODO: Show user-friendly error message
         }
       }
     };
@@ -363,11 +361,11 @@ export class ChatInputComponent {
   }
 
   /**
-   * Handle PDF document attachment for AI document analysis
+   * Handle document attachment for AI document analysis (supports all DocumentAnalyzer formats)
    */
   private async handleDocumentAttachment(file: File): Promise<void> {
     try {
-      // Convert PDF to base64 for document analysis
+      // Convert document to base64 for analysis
       const base64 = await this.fileToBase64(file);
       
       // Create document attachment object
@@ -387,11 +385,175 @@ export class ChatInputComponent {
       // Focus input for user to add text description or questions about the document
       this.focusInput();
       
-      console.log('[ChatInput] ✅ PDF documento adjuntado:', file.name, this.formatFileSize(file.size));
+      const fileExtension = this.getFileExtension(file.name);
+      console.log(`[ChatInput] ✅ ${fileExtension.toUpperCase()} documento adjuntado:`, file.name, this.formatFileSize(file.size));
       
     } catch (error) {
-      console.error('[ChatInput] ❌ Error procesando documento PDF:', error);
+      console.error('[ChatInput] ❌ Error procesando documento:', error);
       // TODO: Show error message to user
+    }
+  }
+
+  /**
+   * Check if the file type is supported by DocumentAnalyzer
+   */
+  private isSupportedDocumentType(file: File): boolean {
+    const supportedTypes = [
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'text/plain',
+      'text/csv',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/tab-separated-values',
+      'text/markdown',
+      'application/json'
+    ];
+    
+    const extension = this.getFileExtension(file.name).toLowerCase();
+    const supportedExtensions = ['pdf', 'doc', 'docx', 'txt', 'csv', 'xls', 'xlsx', 'tsv', 'md', 'json'];
+    
+    return supportedTypes.includes(file.type) || supportedExtensions.includes(extension);
+  }
+
+  /**
+   * Extract file extension from filename (public for template)
+   */
+  getFileExtension(filename: string): string {
+    return filename.split('.').pop() || '';
+  }
+
+  /**
+   * Get human-readable label for document type
+   */
+  getDocumentTypeLabel(filename: string): string {
+    const extension = this.getFileExtension(filename).toLowerCase();
+    
+    switch (extension) {
+      case 'pdf':
+        return 'PDF Document';
+      case 'doc':
+      case 'docx':
+        return 'Word Document';
+      case 'xls':
+      case 'xlsx':
+        return 'Excel Spreadsheet';
+      case 'csv':
+        return 'CSV File';
+      case 'tsv':
+        return 'TSV File';
+      case 'txt':
+        return 'Text File';
+      case 'md':
+        return 'Markdown File';
+      case 'json':
+        return 'JSON File';
+      default:
+        return 'Document';
+    }
+  }
+
+  /**
+   * Get SVG markup for document icon based on file extension
+   */
+  getDocumentIconSvg(filename: string): string {
+    const extension = this.getFileExtension(filename).toLowerCase();
+    
+    const baseSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+      <polyline points="14,2 14,8 20,8"/>`;
+    
+    switch (extension) {
+      case 'pdf':
+        return `${baseSvg}<text x="7" y="15" font-size="6" fill="currentColor">PDF</text></svg>`;
+      case 'doc':
+      case 'docx':
+        return `${baseSvg}<text x="6" y="15" font-size="5" fill="currentColor">DOC</text></svg>`;
+      case 'xls':
+      case 'xlsx':
+        return `${baseSvg}
+          <rect x="8" y="11" width="8" height="6" fill="none" stroke="currentColor"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="12" y1="11" x2="12" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+          <line x1="8" y1="13" x2="16" y2="13"/>
+          <line x1="8" y1="15" x2="16" y2="15"/>
+        </svg>`;
+      case 'csv':
+      case 'tsv':
+        return `${baseSvg}<text x="6" y="15" font-size="5" fill="currentColor">CSV</text></svg>`;
+      case 'txt':
+      case 'md':
+        return `${baseSvg}
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>`;
+      case 'json':
+        return `${baseSvg}<text x="6" y="15" font-size="4" fill="currentColor">JSON</text></svg>`;
+      default:
+        return `${baseSvg}
+          <line x1="16" y1="13" x2="8" y2="13"/>
+          <line x1="16" y1="17" x2="8" y2="17"/>
+          <line x1="10" y1="9" x2="8" y2="9"/>
+        </svg>`;
+    }
+  }
+
+  /**
+   * Get CSS class for document icon based on file extension
+   */
+  getDocumentIconClass(filename: string): string {
+    const extension = this.getFileExtension(filename).toLowerCase();
+    
+    switch (extension) {
+      case 'pdf':
+        return 'pdf-icon';
+      case 'doc':
+      case 'docx':
+        return 'word-icon';
+      case 'xls':
+      case 'xlsx':
+        return 'excel-icon';
+      case 'csv':
+      case 'tsv':
+        return 'csv-icon';
+      case 'txt':
+      case 'md':
+        return 'text-icon';
+      case 'json':
+        return 'json-icon';
+      default:
+        return 'document-icon';
+    }
+  }
+
+  /**
+   * Get appropriate icon for document type
+   */
+  getDocumentIcon(filename: string): string {
+    const extension = this.getFileExtension(filename).toLowerCase();
+    
+    switch (extension) {
+      case 'pdf':
+        return '📄'; // PDF icon
+      case 'doc':
+      case 'docx':
+        return '📝'; // Word icon
+      case 'xls':
+      case 'xlsx':
+        return '📊'; // Excel icon
+      case 'csv':
+      case 'tsv':
+        return '📋'; // CSV icon
+      case 'txt':
+      case 'md':
+        return '📃'; // Text icon
+      case 'json':
+        return '🔧'; // JSON icon
+      default:
+        return '📄'; // Default document icon
     }
   }
 

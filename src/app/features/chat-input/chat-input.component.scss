@@ -317,6 +317,18 @@
   border-radius: 8px;
   position: relative;
   transition: all 0.2s ease;
+  animation: fadeInAttachment 0.3s ease-out;
+}
+
+@keyframes fadeInAttachment {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 .attachment-item:hover {
@@ -342,293 +354,47 @@
   border-radius: 6px;
   border: 1px solid var(--mat-app-border);
   box-shadow: var(--mat-app-shadow-sm);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.document-icon:hover {
+  transform: scale(1.05);
+  box-shadow: var(--mat-app-shadow-md);
 }
 
 .document-icon svg {
   width: 24px;
   height: 24px;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
 }
 
-.attachment-info {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+/* Document Type Specific Styles */
+.pdf-icon {
+  background: #ff4757 !important; /* Red for PDF */
+  color: white !important;
 }
 
-.attachment-name {
-  font-weight: 500;
-  color: var(--mat-app-on-surface);
-  font-size: 14px;
+.word-icon {
+  background: #2980b9 !important; /* Blue for Word */
+  color: white !important;
 }
 
-.attachment-size {
-  font-size: 12px;
-  color: var(--mat-app-on-surface-variant);
+.excel-icon {
+  background: #27ae60 !important; /* Green for Excel */
+  color: white !important;
 }
 
-.attachment-remove {
-  background: var(--mat-app-error);
-  border: none;
-  border-radius: 50%;
-  width: 24px;
-  height: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  color: var(--mat-app-on-error);
-  transition: all 0.2s ease;
+.csv-icon {
+  background: #f39c12 !important; /* Orange for CSV */
+  color: white !important;
 }
 
-.attachment-remove:hover {
-  background: var(--mat-app-error-variant);
-  transform: scale(1.1);
+.text-icon {
+  background: #95a5a6 !important; /* Gray for Text/Markdown */
+  color: white !important;
 }
 
-.attachment-remove svg {
-  width: 12px;
-  height: 12px;
-}.suggestion-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: rgba(var(--mat-app-primary-rgb), 0.1);
-  border: 1px solid rgba(var(--mat-app-primary-rgb), 0.2);
-  border-radius: 20px;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--mat-app-on-surface);
-  cursor: pointer;
-  transition: all 0.2s ease;
-  text-align: left;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.suggestion-item:hover {
-  background: rgba(var(--mat-app-primary-rgb), 0.15);
-  transform: translateY(-1px);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
-}
-
-.suggestion-icon {
-  font-size: 16px;
-  color: var(--mat-app-primary);
-}
-
-.suggestion-text {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 180px;
-}
-
-.suggestion-item::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: var(--mat-app-gradient-hero);
-  opacity: 0;
-  transition: opacity 0.3s ease;
-}
-
-.suggestion-item:hover {
-  background: var(--mat-app-surface-elevated);
-  border-color: var(--mat-app-primary);
-  transform: translateY(-4px);
-  box-shadow: var(--mat-app-shadow-md);
-}
-
-.suggestion-item:hover::before {
-  opacity: 0.03;
-}    .suggestion-icon {
-  font-size: 18px;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.suggestion-text {
-  color: var(--mat-app-on-surface);
-  font-weight: 500;
-  line-height: 1.4;
-  position: relative;
-  z-index: 1;
-}    /* Responsive Design */
-@media (max-width: 1024px) {
-  .suggestion-list {
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 8px;
-  }
-}
-
-@media (max-width: 768px) {
-  .chat-input-container {
-    margin: 12px;
-    padding: 16px;
-    border-radius: 16px;
-  }
-
-  .input-wrapper {
-    padding: 12px 16px;
-    border-radius: 12px;
-  }
-
-  .suggestion-list {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 8px;
-  }
-
-  .suggestion-item {
-    padding: 10px 14px;
-    border-radius: 8px;
-    font-size: 12px;
-    gap: 8px;
-  }
-
-  .suggestion-icon {
-    font-size: 16px;
-  }
-
-  .suggestions h4 {
-    font-size: 12px;
-    margin-bottom: 10px;
-  }
-
-  .char-counter {
-    display: none;
-  }
-
-  .send-btn {
-    min-width: 44px;
-    height: 44px;
-    padding: 10px;
-    border-radius: 12px;
-  }
-
-  .send-btn svg {
-    width: 20px;
-    height: 20px;
-  }
-}
-
-@media (max-width: 600px) {
-  .suggestion-list {
-    grid-template-columns: 1fr 1fr;
-    gap: 6px;
-  }
-
-  .suggestion-item {
-    padding: 8px 12px;
-    font-size: 11px;
-    gap: 6px;
-  }
-}
-
-@media (max-width: 480px) {
-  .chat-input-container {
-    margin: 8px;
-    padding: 12px;
-    border-radius: 12px;
-  }
-
-  .input-area {
-    gap: 12px;
-  }
-
-  .attachment-btn {
-    padding: 6px;
-    border-radius: 10px;
-  }
-
-  .attachment-btn svg {
-    width: 18px;
-    height: 18px;
-  }
-
-  .suggestions {
-    margin-top: 16px;
-    padding-top: 16px;
-  }
-
-  .suggestions h4 {
-    font-size: 12px;
-    margin-bottom: 10px;
-  }
-
-  .suggestion-item {
-    padding: 10px 14px;
-    gap: 10px;
-    font-size: 12px;
-  }
-
-  .suggestion-icon {
-    font-size: 16px;
-  }      .message-input {
-    font-size: 14px;
-  }
-}
-
-@media (max-width: 360px) {
-  .chat-input-container {
-    margin: 6px;
-    padding: 10px;
-  }
-
-  .input-wrapper {
-    padding: 10px 12px;
-  }
-
-  .suggestion-item {
-    padding: 6px 10px;
-    gap: 6px;
-    font-size: 10px;
-  }
-
-  .suggestion-icon {
-    font-size: 12px;
-  }
-}
-
-/* Landscape mode optimizations for mobile */
-@media (max-height: 500px) and (orientation: landscape) {
-  .suggestions {
-    margin-top: 12px;
-    padding-top: 12px;
-  }
-
-  .suggestions h4 {
-    margin-bottom: 8px;
-    font-size: 12px;
-  }
-
-  .suggestion-list {
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 6px;
-  }
-
-  .suggestion-item {
-    padding: 8px 12px;
-    font-size: 11px;
-  }
-
-  .suggestion-icon {
-    font-size: 14px;
-  }
-}
-
-/* Touch improvements */
-@media (pointer: coarse) {
-  .suggestion-item {
-    min-height: 44px; /* Ensure touch targets are large enough */
-  }      .attachment-btn,
-  .send-btn {
-    min-height: 44px;
-    min-width: 44px;
-  }
+.json-icon {
+  background: #8e44ad !important; /* Purple for JSON */
+  color: white !important;
 }

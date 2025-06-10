@@ -70,6 +70,12 @@ export interface DocumentAnalysisResult {
     processedAt?: string;
     chunks?: number;
     totalCharacters?: number;
+    fileType?: string;
+    encoding?: string;
+    sheets?: string[];
+    headers?: string[];
+    estimatedTokens?: number;
+    processingStrategy?: string;
   };
   entities?: ExtractedEntity[];
   error?: string;

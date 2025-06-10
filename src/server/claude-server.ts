@@ -17,6 +17,7 @@ import { EnvironmentConfig } from './config/environment.config';
 import { BraveSearchService } from './services/brave-search.service';
 import { GoogleCalendarService } from './services/google-calendar.service';
 import { GoogleDriveService } from './services/google-drive.service';
+import { DocumentAnalysisService } from './services/document-analysis.service';
 
 // AI Prompts
 import { buildSystemPrompt, buildContextAwarePrompt, initializePromptCache, getPromptCacheStats } from './ai/prompts';
@@ -59,6 +60,7 @@ let ai: any;
 let braveSearchService: BraveSearchService;
 let googleCalendarService: GoogleCalendarService;
 let googleDriveService: GoogleDriveService;
+let documentAnalysisService: DocumentAnalysisService;
 
 // Auth tokens for current request
 let currentRequestAuthTokens: { calendar?: string; drive?: string } = {};
@@ -141,6 +143,7 @@ function initializeEnvironment(): void {
   braveSearchService = new BraveSearchService(config.braveSearchApiKey || '');
   googleCalendarService = new GoogleCalendarService();
   googleDriveService = new GoogleDriveService();
+  documentAnalysisService = new DocumentAnalysisService(null); // AI service will be injected later
 }
 
 /**
@@ -404,6 +407,107 @@ function defineTools(): void {
           message: `Error: ${error instanceof Error ? error.message : 'Desconocido'}`,
           calendarTokenRefreshed: false,
           driveTokenRefreshed: false
+        };      }
+    })
+  );
+
+  // Document Analysis Tool with tracking
+  ai.defineTool(
+    {
+      name: 'analyzeDocument',
+      description: 'Analizar documentos PDF, Word, Excel, CSV, TXT para extraer contenido, generar resúmenes y responder preguntas específicas',
+      inputSchema: z.object({
+        documentBase64: z.string().describe('Contenido del documento codificado en base64'),
+        fileName: z.string().describe('Nombre del archivo con extensión'),
+        analysisType: z.enum(['general', 'summary', 'extraction', 'legal', 'financial', 'technical']).optional().default('general').describe('Tipo de análisis a realizar'),
+        specificQuestions: z.array(z.string()).optional().describe('Preguntas específicas sobre el documento'),
+        includeMetadata: z.boolean().optional().default(true).describe('Incluir metadatos del documento')
+      }),
+      outputSchema: z.object({
+        success: z.boolean(),
+        content: z.string(),
+        summary: z.string().optional(),
+        metadata: z.object({
+          pages: z.number().optional(),
+          wordCount: z.number(),
+          language: z.string().optional(),
+          fileType: z.string(),
+          chunks: z.number().optional(),
+          processingStrategy: z.string().optional(),
+          estimatedTokens: z.number()
+        }),
+        entities: z.array(z.object({
+          type: z.string(),
+          value: z.string(),
+          confidence: z.number()
+        })).optional(),
+        message: z.string()
+      })
+    },
+    createTrackedTool('Document Analysis', async (input: { 
+      documentBase64: string; 
+      fileName: string; 
+      analysisType?: string;
+      specificQuestions?: string[];
+      includeMetadata?: boolean;
+    }) => {
+      try {
+        console.log('🔧 Analyzing document:', {
+          fileName: input.fileName,
+          analysisType: input.analysisType || 'general',
+          base64Length: input.documentBase64.length,
+          hasQuestions: !!input.specificQuestions?.length
+        });
+
+        const result = await documentAnalysisService.analyzeDocument(
+          input.documentBase64,
+          input.fileName,
+          input.analysisType as any || 'general',
+          input.specificQuestions,
+          undefined, // maxLength (deprecated, handled by service)
+          undefined  // chunkSize (deprecated, handled by service)
+        );
+
+        if (result.success) {
+          return {
+            success: true,
+            content: result.content,
+            summary: result.summary,
+            metadata: {
+              pages: result.metadata.pages,
+              wordCount: result.metadata.wordCount,
+              language: result.metadata.language,
+              fileType: result.metadata.fileType,
+              chunks: result.metadata.chunks,
+              processingStrategy: result.metadata.processingStrategy,
+              estimatedTokens: result.metadata.estimatedTokens || Math.ceil(result.metadata.wordCount * 0.75)
+            },
+            entities: result.entities,
+            message: `Documento "${input.fileName}" analizado exitosamente. ${result.metadata.chunks || 1} fragmentos procesados.`
+          };
+        } else {
+          return {
+            success: false,
+            content: '',
+            metadata: {
+              wordCount: 0,
+              fileType: 'unknown',
+              estimatedTokens: 0
+            },
+            message: result.error || 'Error al analizar el documento'
+          };
+        }
+      } catch (error) {
+        console.error('❌ Document analysis error:', error);
+        return {
+          success: false,
+          content: '',
+          metadata: {
+            wordCount: 0,
+            fileType: 'unknown',
+            estimatedTokens: 0
+          },
+          message: `Error: ${error instanceof Error ? error.message : 'Error desconocido al analizar documento'}`
         };
       }
     })
@@ -417,7 +521,8 @@ async function processChatRequest(
   message: string, 
   conversationId: string, 
   authTokens?: { calendar?: string; drive?: string },
-  conversationLength: number = 0
+  conversationLength: number = 0,
+  attachments?: any[]
 ): Promise<ChatResponse> {
   try {
     // Store tokens for current request
@@ -458,13 +563,115 @@ async function processChatRequest(
     // Create user prompt with clear context
     const userPrompt = `${message}`;
 
+    // Process attachments first if present
+    let documentAnalysisResults = [];
+    if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+      console.log('📄 Processing attachments before sending to Claude:', attachments.length);
+      
+      console.log('Attachments structure debug:', JSON.stringify(attachments.map(a => ({type: a.type, hasContent: !!a.base64 || !!a.file, name: a.name || a.fileName, mimeType: a.mimeType})), null, 2));
+      
+      for (const attachment of attachments) {
+        // Soporte para ambos formatos: {base64, name} o {file, fileName}
+        const documentContent = attachment.base64 || attachment.file;
+        const documentName = attachment.name || attachment.fileName;
+        
+        console.log(`🔍 Document properties: type=${attachment.type}, hasContent=${!!documentContent}, name=${documentName}, mimeType=${attachment.mimeType || 'unknown'}`);
+        
+        // Analizar cualquier adjunto que tenga contenido, independientemente del tipo
+        if (documentContent) {
+          try {
+            console.log(`🔍 Analyzing document: ${documentName} (${attachment.mimeType || 'unknown type'})`);
+            // Verificar que el contenido sea una cadena base64 válida
+            if (!documentContent.match(/^([A-Za-z0-9+/]{4})*([A-Za-z0-9+/]{3}=|[A-Za-z0-9+/]{2}==)?$/)) {
+              console.warn('⚠️ Document content does not appear to be valid base64, attempting analysis anyway');
+            }
+            
+            const result = await documentAnalysisService.analyzeDocument(
+              documentContent,
+              documentName,
+              attachment.analysisType || 'general'
+            );
+            
+            console.log(`📈 Document analysis result:`, { success: result.success, contentLength: result.content?.length, hasSummary: !!result.summary });
+            
+            if (result.success) {
+              console.log(`✅ Successfully analyzed document: ${documentName}`);
+              documentAnalysisResults.push({
+                name: documentName,
+                mimeType: attachment.mimeType || 'text/plain',
+                content: result.content.substring(0, Math.min(result.content.length, 5000)),
+                summary: result.summary,
+                metadata: result.metadata
+              });
+            } else {
+              console.error(`❌ Failed to analyze document: ${attachment.name}`, result.error);
+            }
+          } catch (error) {
+            console.error(`❌ Error processing attachment: ${attachment.name}`, error);
+          }
+        }
+      }
+    }
+
+    // Add document analysis results to the prompt if available
+    let enhancedUserPrompt = userPrompt;
+    if (documentAnalysisResults.length > 0) {
+      // Si hay documentos analizados con éxito, construímos una presentación más profesional
+      enhancedUserPrompt += '\n\n===== CONTENIDO DEL DOCUMENTO ADJUNTO =====\n\n';
+      
+      // Solo incluimos documentos con análisis exitoso - sin errores
+      for (const result of documentAnalysisResults) {
+        enhancedUserPrompt += `Nombre: ${result.name}\nTipo: ${result.mimeType}\n\n`;
+        
+        // Siempre incluir el resumen si está disponible primero para mejor contexto
+        if (result.summary) {
+          enhancedUserPrompt += `Resumen:\n${result.summary}\n\n`;
+        }
+        
+        // Luego incluir contenido (posiblemente truncado)
+        enhancedUserPrompt += `Contenido:\n${result.content}\n\n`;
+      }
+      
+      // Cierre y solicitud de análisis
+      enhancedUserPrompt += '===== FIN DEL CONTENIDO DEL DOCUMENTO =====\n\nPor favor analiza este documento detalladamente.';
+      
+      // Ajustar instrucciones basado en MIME type y tipo de documento
+      if (documentAnalysisResults.some(r => r.mimeType?.includes('spreadsheet') || r.mimeType?.includes('excel'))) {
+        enhancedUserPrompt += ' Presta especial atención a los datos numéricos y las relaciones entre filas y columnas.';
+      } else if (documentAnalysisResults.some(r => r.name?.toLowerCase().endsWith('.csv'))) {
+        enhancedUserPrompt += ' Identifica patrones en los datos y presenta conclusiones claras.';
+      } else if (documentAnalysisResults.some(r => r.name?.toLowerCase().endsWith('.pdf'))) {
+        enhancedUserPrompt += ' Identifica las secciones principales y los puntos clave del documento.';
+      }
+    }
+
     // Use specialized retry service for 529 overloaded errors
     const overloadedRetryWrapper = createOverloadedRetryWrapper();
+    // Modificamos el prompt para indicar a Claude que NO use analyzeDocument
+    // ya que el documento ya ha sido analizado
+    let modifiedSystemPrompt = systemPrompt;
+    
+    // Si hay documentos analizados, añadir instrucciones específicas al sistema
+    if (documentAnalysisResults.length > 0) {
+      modifiedSystemPrompt += `\n\n<!-- INSTRUCCIONES ADICIONALES -->\nIMPORTANTE: Los documentos adjuntos ya han sido analizados. NO utilices la herramienta 'analyzeDocument' para volver a analizarlos. Toda la información relevante ya está incluida en el mensaje del usuario.\n<!-- /INSTRUCCIONES ADICIONALES -->`;
+      
+      // Si es un Excel, reforzar instrucciones para evitar análisis financiero redundante
+      if (documentAnalysisResults.some(r => r.mimeType?.includes('spreadsheet') || r.mimeType?.includes('excel'))) {
+        enhancedUserPrompt += '\n\nNota: No es necesario realizar ningún análisis financiero adicional. Por favor análiza el contenido ya proporcionado.';
+      }
+    }
+    
     const response = await overloadedRetryWrapper(async () => {
+      // Deshabilitamos analyzeDocument cuando ya hay documentos procesados
+      // para evitar que Claude intente hacer análisis redundantes
+      const availableTools = documentAnalysisResults.length > 0 
+        ? ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
+        : ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens', 'analyzeDocument'];
+      
       return await ai.generate({
         model: claude35Haiku,
-        prompt: systemPrompt + '\n\nUsuario: ' + userPrompt,
-        tools: ['searchWeb', 'listCalendarEvents', 'listDriveFiles', 'refreshGoogleTokens']
+        prompt: modifiedSystemPrompt + '\n\nUsuario: ' + enhancedUserPrompt,
+        tools: availableTools
       });
     });
 
@@ -583,7 +790,7 @@ function createExpressServer(): express.Application {
   // Main chat endpoint
   app.post('/api/chat', async (req: Request, res: Response) => {
     try {
-      const { message, conversationId, conversationLength } = req.body;
+      let { message, conversationId, conversationLength, attachments } = req.body;
       
       const calendarToken = req.headers['x-calendar-token'] as string;
       const driveToken = req.headers['x-drive-token'] as string;
@@ -593,19 +800,37 @@ function createExpressServer(): express.Application {
         drive: driveToken?.trim() || undefined
       };
 
+      // Log and process attachments if present
+      let documentAttachmentsLog = 'none';
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        documentAttachmentsLog = `${attachments.length} files (${attachments.map(a => a.mimeType).join(', ')})`;
+      }
+
       console.log('📥 Incoming chat request:', {
         messageLength: message?.length || 0,
         conversationId: conversationId?.substring(0, 8) + '...',
         hasCalendarToken: !!authTokens.calendar,
         hasDriveToken: !!authTokens.drive,
-        conversationLength: conversationLength || 0
+        conversationLength: conversationLength || 0,
+        attachments: documentAttachmentsLog
       });
+      
+      // Process attachments before sending to Claude
+      if (attachments && Array.isArray(attachments) && attachments.length > 0) {
+        // If the message already contains instructions for a document, don't modify it
+        if (!message.toLowerCase().includes('documento') && !message.toLowerCase().includes('archivo')) {
+          // Add context about the attached document to the message
+          const fileTypes = [...new Set(attachments.map(a => a.mimeType.split('/')[1] || 'documento'))];
+          message = `${message}\n\nHe adjuntado ${attachments.length === 1 ? 'un' : attachments.length} ${fileTypes.join(', ')} para que lo analices. Por favor revísalo y dame tu análisis.`;
+        }
+      }
 
       const response = await processChatRequest(
         message, 
         conversationId, 
         authTokens, 
-        conversationLength || 0
+        conversationLength || 0,
+        attachments
       );
       res.json(response);    } catch (error) {
       console.error('❌ API Error:', error);
