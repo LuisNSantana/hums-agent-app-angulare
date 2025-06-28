@@ -9,7 +9,11 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 @Component({
   selector: 'app-integrations-page',
   standalone: true,
-  imports: [CommonModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [
+    CommonModule, 
+    MatIconModule, 
+    MatProgressSpinnerModule
+  ],
   templateUrl: './integrations-page.html',
   styleUrl: './integrations-page.scss'
 })

@@ -112,8 +112,8 @@
   margin-bottom: 1.25rem;
   
   .integration-logo {
-    width: 48px;
-    height: 48px;
+    width: 52px;
+    height: 52px;
     // Idealmente, --mat-app-primary-rgb estaría definido para usar con rgba
     background-color: rgba(var(--mat-app-primary-rgb, 99, 102, 241), 0.1); 
     border-radius: 50%;
@@ -121,10 +121,26 @@
     align-items: center;
     justify-content: center;
     margin-right: 1rem;
+    box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15);
+    overflow: hidden;
+    padding: 6px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    
+    &:hover {
+      transform: scale(1.05);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
     
     mat-icon {
       font-size: 24px;
       color: var(--mat-app-primary);
+    }
+    
+    .google-icon {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
     }
   }
   

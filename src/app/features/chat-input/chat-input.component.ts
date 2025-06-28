@@ -22,29 +22,58 @@ import { fromEvent } from 'rxjs';
 import { debounceTime, distinctUntilChanged, map } from 'rxjs/operators';
 import { ChatAttachment } from '../../shared/models/chat.models';
 import { ChatService } from '../../core/services/chat.service';
+import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatMenuModule } from '@angular/material/menu';
+import { MatButtonModule } from '@angular/material/button';
+import { MatRippleModule } from '@angular/material/core';
 
 @Component({
   selector: 'app-chat-input',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, MatIconModule, MatTooltipModule, MatMenuModule, MatButtonModule, MatRippleModule],
   template: `
     <div class="chat-input-container" [class.disabled]="disabled()">
-      <!-- Input area -->
       <div class="input-area">
         <div class="input-wrapper">
-          <!-- File attachment button -->
-          <button 
-            type="button"
+          <button
             class="attachment-btn"
-            [disabled]="disabled()"
+            mat-icon-button
             (click)="onAttachFile()"
-            title="Attach file">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-              <path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66L9.64 16.2a2 2 0 01-2.83-2.83l8.49-8.48"/>
-            </svg>
+            matTooltip="Adjuntar archivo"
+            [disabled]="disabled()">
+            <mat-icon>add</mat-icon>
           </button>
 
-          <!-- Text input -->          <textarea
+          <button
+            class="tools-btn"
+            mat-icon-button
+            [matMenuTriggerFor]="toolsMenu"
+            matTooltip="Herramientas"
+            [disabled]="disabled()">
+            <mat-icon>tune</mat-icon>
+          </button>
+          
+          <mat-menu #toolsMenu="matMenu" class="tools-menu">
+            <button mat-menu-item (click)="onToolSelected('document')">
+              <mat-icon>description</mat-icon>
+              <span>Analizar Documento</span>
+            </button>
+            <button mat-menu-item (click)="onToolSelected('web')">
+              <mat-icon>search</mat-icon>
+              <span>Buscar en Web</span>
+            </button>
+            <button mat-menu-item (click)="onToolSelected('calendar')">
+              <mat-icon>event</mat-icon>
+              <span>Google Calendar</span>
+            </button>
+            <button mat-menu-item (click)="onToolSelected('drive')">
+              <mat-icon>folder</mat-icon>
+              <span>Google Drive</span>
+            </button>
+          </mat-menu>
+
+          <textarea
             #messageInput
             class="message-input"
             [value]="message()"
@@ -57,57 +86,39 @@ import { ChatService } from '../../core/services/chat.service';
             rows="1"
             maxlength="32000">
           </textarea>
-
-          <!-- Character counter -->
-          <div class="char-counter" [class.warning]="isNearLimit()">
-            {{ message().length }}/32000
-          </div>        </div>        <!-- Attached Files Preview -->
+          
+          <span class="char-counter" [class.warning]="isNearLimit()">
+            {{ message().length }}
+          </span>
+          
+          <button
+            class="send-btn"
+            (click)="onSend()"
+            [disabled]="!canSend() || disabled()">
+            <mat-icon>arrow_upward</mat-icon>
+          </button>
+        </div>
+        
         @if (currentAttachments().length > 0) {
           <div class="attachments-preview">
             @for (attachment of currentAttachments(); track attachment.id) {
               <div class="attachment-item">
-                @if (attachment.type === 'image') {
-                  <img [src]="attachment.url" [alt]="attachment.name" class="attachment-image" />
-                } @else if (attachment.type === 'document') {
-                  <div 
-                    class="document-icon"
-                    [class]="getDocumentIconClass(attachment.name)"
-                    [title]="getDocumentTypeLabel(attachment.name)"
-                    [innerHTML]="getDocumentIconSvg(attachment.name)">
-                  </div>
-                }
-                <div class="attachment-info">
-                  <span class="attachment-name">{{ attachment.name }}</span>
-                  <span class="attachment-size">{{ formatFileSize(attachment.size) }}</span>
+                <div class="attachment-icon">
+                  <mat-icon *ngIf="attachment.type === 'image'">image</mat-icon>
+                  <mat-icon *ngIf="attachment.type === 'document'">insert_drive_file</mat-icon>
                 </div>
-                <button type="button" class="attachment-remove" (click)="removeAttachment(attachment.id)" title="Remove attachment">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
+                <div class="attachment-details">
+                  <div class="attachment-name">{{ attachment.name }}</div>
+                  <div class="attachment-size">{{ formatFileSize(attachment.size) }}</div>
+                </div>
+                <button class="remove-attachment" (click)="removeAttachment(attachment.id)" matTooltip="Eliminar archivo">
+                  <mat-icon>close</mat-icon>
                 </button>
               </div>
             }
           </div>
-        }<!-- Suggestions section removed to save space -->
-
-        <!-- Send button -->
-        <button 
-          type="submit"
-          class="send-btn"
-          [disabled]="!canSend()"
-          (click)="onSend()"
-          title="Send message (Ctrl+Enter)">
-          @if (disabled()) {
-            <div class="loading-spinner"></div>
-          } @else {
-            <svg viewBox="0 0 24 24" fill="currentColor">
-              <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-            </svg>
-          }
-        </button>
+        }
       </div>
-
-      <!-- Other UI sections -->
     </div>
   `,
   styleUrls: ['./chat-input.component.scss']
@@ -131,6 +142,7 @@ export class ChatInputComponent {
   // Internal state
   readonly message = signal<string>('');
   readonly inputHeight = signal<number>(40);
+  readonly showToolsPopup = signal<boolean>(false);
   
   // Signals to track current attachments
   readonly currentAttachments = signal<ChatAttachment[]>([]);
@@ -657,5 +669,42 @@ export class ChatInputComponent {
    */
   trackBySuggestion(index: number, suggestion: { id: number; icon: string; text: string }): number {
     return suggestion.id;
+  }
+
+  /**
+   * Handle tool selection from the tools menu
+   */
+  onToolSelected(tool: string): void {
+    let promptText = '';
+    
+    switch (tool) {
+      case 'document':
+        this.onAttachFile();
+        promptText = 'Analiza este documento:';
+        break;
+      case 'search':
+        promptText = 'Busca información sobre:';
+        break;
+      case 'calendar':
+        promptText = 'Muestra mis eventos de calendario entre [fecha inicio] y [fecha fin]';
+        break;
+      case 'drive':
+        promptText = 'Busca en mi Google Drive:';
+        break;
+    }
+    
+    if (promptText) {
+      this.message.set(promptText);
+      this.focusInput();
+      
+      // Posicionar el cursor al final del texto
+      setTimeout(() => {
+        const input = this.messageInput()?.nativeElement;
+        if (input) {
+          input.selectionStart = input.selectionEnd = promptText.length;
+          this.adjustTextareaHeight(input);
+        }
+      }, 0);
+    }
   }
 }

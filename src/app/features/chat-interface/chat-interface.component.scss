@@ -1,6 +1,7 @@
 .chat-interface {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  /* Default: collapsed sidebar (60px) + main area */
+  grid-template-columns: 60px 1fr;
   grid-template-rows: auto 1fr auto;
   height: 100vh;
   background: #000000;
@@ -35,7 +36,13 @@
   }
 }
 
+/* Expanded sidebar (desktop/full) */
+.chat-interface.sidebar-open {
+  grid-template-columns: 320px 1fr;
+}
+
 .chat-main {
+  /* Default to column 2 when two columns exist, but with collapsed 60px grid track still second */
   grid-column: 2;
   grid-row: 1 / span 3;
   display: flex;
@@ -336,5 +343,12 @@
     padding: 14px 24px;
     font-size: 1rem;
     border-radius: 14px;
+  }
+
+  .chat-interface {
+    grid-template-columns: 100%;
+  }
+  .chat-main {
+    grid-column: 1;
   }
 }

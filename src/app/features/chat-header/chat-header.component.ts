@@ -35,7 +35,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
-import { Conversation, AIModel } from '../../shared/models/chat.models';
+import { Conversation } from '../../shared/models/chat.models';
 import { AuthService } from '../../core/services/auth.service';
 
 @Component({
@@ -83,37 +83,7 @@ import { AuthService } from '../../core/services/auth.service';
         </div>
       </div>
 
-      <!-- Center Section -->
-      <div class="header-center">
-        <!-- Model Selection -->
-        @if (availableModels().length > 0) {
-          <div class="model-selector">
-            <label class="model-label">Model:</label>
-            <select 
-              class="model-select"
-              [value]="selectedModel()"
-              (change)="onModelChange($event)"
-            >              @for (model of sortedModels(); track model.id) {
-                <option [value]="model.id" [disabled]="!model.isAvailable">
-                  {{ model.name }}
-                  @if (model.id === 'gemma3:4b') {
-                    ★ 
-                  }
-                  @if (!model.isAvailable) {
-                    (Unavailable)
-                  }
-                </option>
-              }
-            </select>
-            <div class="model-info">
-              @if (selectedModelInfo()) {
-                <span class="model-provider">{{ selectedModelInfo()!.provider }}</span>
-                <span class="model-context">{{ formatContextWindow(selectedModelInfo()!.contextWindow) }}</span>
-              }
-            </div>
-          </div>
-        }
-      </div>
+
 
       <!-- Right Section -->
       <div class="header-right">
@@ -205,28 +175,14 @@ import { AuthService } from '../../core/services/auth.service';
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 16px 24px;
-      background: var(--mat-app-surface);
-      border-bottom: 1px solid var(--mat-app-glass-border);
-      backdrop-filter: blur(var(--mat-app-glass-blur));
+      padding: 12px 24px;
+      background: transparent; /* Fondo transparente para integrar */
       position: sticky;
       top: 0;
       z-index: 20;
-      min-height: 72px;
-      box-shadow: var(--mat-app-shadow-md);
-      
-      /* Glass morphism enhancement */
-      &::before {
-        content: '';
-        position: absolute;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: var(--mat-app-glass-bg);
-        pointer-events: none;
-        z-index: -1;
-      }
+      min-height: 68px;
+      border-bottom: 1px solid var(--mat-app-border-color, #333);
+    
 
       /* Gradient overlay */
       &::after {
@@ -806,13 +762,10 @@ export class ChatHeaderComponent implements OnInit {
 
   // Inputs
   readonly currentConversation = input<Conversation | null>(null);
-  readonly availableModels = input<AIModel[]>([]);
-  readonly selectedModel = input<string>('');
   readonly sidebarOpen = input<boolean>(true);
 
   // Outputs
   readonly toggleSidebar = output<void>();
-  readonly modelChanged = output<string>();
 
   // Internal state
   readonly userMenuOpen = signal<boolean>(false);
@@ -821,30 +774,6 @@ export class ChatHeaderComponent implements OnInit {
   // Auth-related computed values
   readonly currentUser = computed(() => this.authService.user());
   readonly isAuthenticated = computed(() => this.authService.isAuthenticated());
-
-  // Computed values
-  readonly sortedModels = computed(() => {
-    const models = this.availableModels();
-    
-    // Sort models: Gemma 3:4b first, then available models, then unavailable models
-    return [...models].sort((a, b) => {
-      // Gemma 3:4b always first
-      if (a.id === 'gemma3:4b') return -1;
-      if (b.id === 'gemma3:4b') return 1;
-      
-      // Then sort by availability
-      if (a.isAvailable && !b.isAvailable) return -1;
-      if (!a.isAvailable && b.isAvailable) return 1;
-      
-      // Then sort alphabetically
-      return a.name.localeCompare(b.name);
-    });
-  });
-  
-  readonly selectedModelInfo = computed(() => {
-    const modelId = this.selectedModel();
-    return this.availableModels().find(model => model.id === modelId) || null;
-  });
 
   readonly connectionStatusText = computed(() => {
     switch (this.connectionStatus()) {
@@ -861,36 +790,11 @@ export class ChatHeaderComponent implements OnInit {
   onToggleSidebar(): void {
     this.toggleSidebar.emit();
   }
-  /**
-   * Handle model selection change
-   */
-  onModelChange(event: Event): void {
-    const target = event.target as HTMLSelectElement;
-    const newModelId = target.value;
-    
-    console.log('[ChatHeader] 🔄 Model changed to:', newModelId);
-    this.modelChanged.emit(newModelId);
-  }
-  
+
   /**
    * Angular lifecycle hook - After component is initialized
-   * Ensures Gemma 3:4b is selected by default
    */
   ngOnInit(): void {
-    // Check if Gemma 3:4b is available and select it by default if no model is selected
-    setTimeout(() => {
-      const currentSelection = this.selectedModel();
-      const models = this.availableModels();
-      
-      if ((!currentSelection || currentSelection === 'deepseek-r1:7b') && models.length > 0) {
-        const gemmaModel = models.find(m => m.id === 'gemma3:4b');
-        
-        if (gemmaModel) {
-          console.log('[ChatHeader] 🔄 Auto-selecting Gemma 3:4b as default model');
-          this.modelChanged.emit('gemma3:4b');
-        }
-      }
-    }, 100); // Small delay to ensure models are loaded
   }
 
   /**
@@ -916,6 +820,7 @@ export class ChatHeaderComponent implements OnInit {
     this.router.navigate(['/integrations']);
     this.closeUserMenu();
   }
+
   /**
    * Handle export chat
    */
@@ -954,6 +859,7 @@ export class ChatHeaderComponent implements OnInit {
     }
     return `${tokens} tokens`;
   }
+
   /**
    * Format last updated time
    */

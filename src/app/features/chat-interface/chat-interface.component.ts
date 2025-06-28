@@ -48,11 +48,8 @@ import { LayoutService } from './services/layout.service';
         <!-- Header -->
         <app-chat-header
           [currentConversation]="currentConversation()"
-          [availableModels]="availableModels()"
-          [selectedModel]="selectedModel()"
           [sidebarOpen]="sidebarOpen()"
           (toggleSidebar)="toggleSidebar()"
-          (modelChanged)="onModelChanged($event)"
         />
 
         <!-- Messages Container -->
@@ -134,13 +131,19 @@ import { LayoutService } from './services/layout.service';
     }
 
     .chat-main {
-      grid-column: 2;
+      /* Default to first column; will shift when sidebar is open */
+      grid-column: 1;
       grid-row: 1 / span 3;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       height: 100%;
       position: relative;
+    }
+
+    /* Shift chat-main to second column only when sidebar is open on desktop */
+    .chat-interface.sidebar-open .chat-main {
+      grid-column: 2;
     }
 
     @media (max-width: 768px) {
